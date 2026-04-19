@@ -1,0 +1,101 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* ── PoolPal AI brand colors — extracted from logo ── */
+    --brand-blue:    #1756a9;   /* deep navy blue  — logo outer wave  */
+    --brand-cyan:    #00c3e3;   /* bright cyan     — logo circuit      */
+    --brand-blue-dk: #0f3f84;   /* darker navy     — hover/active      */
+    --brand-blue-lt: #e8f1fc;   /* light blue tint — backgrounds       */
+    --brand-cyan-lt: #e0f8fd;   /* light cyan tint — accents           */
+    --brand-mid:     #0891c4;   /* mid tone        — blended           */
+  }
+
+  * { @apply border-slate-200; }
+  body { @apply bg-white text-slate-900; }
+  html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { @apply bg-transparent; }
+  ::-webkit-scrollbar-thumb { @apply bg-slate-200 rounded-full; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-slate-300; }
+}
+
+@layer components {
+  /* ── Cards ─────────────────────────────────────── */
+  .card       { @apply bg-white rounded-2xl border border-slate-100 shadow-sm; }
+  .card-hover { @apply card transition-all duration-200 hover:shadow-md hover:border-cyan-200 cursor-pointer; }
+
+  /* ── Buttons ────────────────────────────────────── */
+  .btn         { @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-medium text-sm transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed select-none; }
+  .btn-primary { @apply btn text-white active:scale-95 shadow-sm; background: var(--brand-blue); }
+  .btn-primary:hover { background: var(--brand-blue-dk); }
+  .btn-secondary { @apply btn active:scale-95; background: var(--brand-blue-lt); color: var(--brand-blue); }
+  .btn-secondary:hover { background: #d4e3f8; }
+  .btn-outline  { @apply btn border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 active:scale-95; }
+  .btn-danger   { @apply btn bg-red-500 text-white hover:bg-red-600 active:scale-95; }
+  .btn-ghost    { @apply btn bg-transparent text-slate-600 hover:bg-slate-100; }
+
+  /* ── Inputs ─────────────────────────────────────── */
+  .input  { @apply w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none transition-colors; }
+  .input:focus { border-color: var(--brand-cyan); box-shadow: 0 0 0 3px rgba(0,195,227,0.12); }
+  .label  { @apply block text-sm font-medium text-slate-700 mb-1.5; }
+
+  /* ── Badges ─────────────────────────────────────── */
+  .badge        { @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold; }
+  .badge-green  { @apply badge bg-emerald-50 text-emerald-700; }
+  .badge-amber  { @apply badge bg-amber-50 text-amber-700; }
+  .badge-red    { @apply badge bg-red-50 text-red-700; }
+  .badge-brand  { @apply badge; background: var(--brand-blue-lt); color: var(--brand-blue); }
+  .badge-cyan   { @apply badge; background: var(--brand-cyan-lt); color: #0077a8; }
+  .badge-slate  { @apply badge bg-slate-100 text-slate-600; }
+
+  /* ── Stat cards ──────────────────────────────────── */
+  .stat-card  { @apply card p-4; }
+  .stat-label { @apply text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1; }
+  .stat-value { @apply text-2xl font-bold text-slate-900 tracking-tight; }
+
+  /* ── Nav ─────────────────────────────────────────── */
+  .nav-item        { @apply flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-500 transition-all duration-150 cursor-pointer; }
+  .nav-item:hover  { background: var(--brand-blue-lt); color: var(--brand-blue); }
+  .nav-item-active { @apply flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium cursor-pointer; background: var(--brand-blue-lt); color: var(--brand-blue); }
+
+  .section-title { @apply text-lg font-bold text-slate-900; }
+}
+
+@layer utilities {
+  .text-brand   { color: var(--brand-blue); }
+  .text-cyan    { color: var(--brand-cyan); }
+  .bg-brand     { background: var(--brand-blue); }
+  .bg-brand-lt  { background: var(--brand-blue-lt); }
+  .bg-cyan-lt   { background: var(--brand-cyan-lt); }
+  .border-brand { border-color: var(--brand-blue); }
+
+  .text-gradient {
+    background: linear-gradient(135deg, var(--brand-blue), var(--brand-cyan));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .animate-fade-in  { animation: fadeIn 0.25s ease-out; }
+  .animate-slide-up { animation: slideUp 0.25s ease-out; }
+}
+
+@keyframes fadeIn  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideUp { from { transform: translateY(6px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+/* ── Dark mode ──────────────────────────────────────── */
+.dark {
+  --brand-blue:    #4a9fd4;
+  --brand-cyan:    #00d4f5;
+  --brand-blue-lt: #0f2744;
+  --brand-cyan-lt: #002d3a;
+}
+.dark body              { @apply bg-slate-900 text-slate-100; }
+.dark .card             { @apply bg-slate-800 border-slate-700; }
+.dark .input            { @apply bg-slate-800 border-slate-600 text-slate-100 placeholder:text-slate-500; }
+.dark .btn-outline      { @apply border-slate-600 text-slate-200 hover:bg-slate-700; }
+.dark .stat-card        { @apply bg-slate-800; }

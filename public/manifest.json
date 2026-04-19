@@ -1,0 +1,14 @@
+{
+  "name": "PoolPal AI",
+  "short_name": "PoolPal",
+  "description": "AI-powered pool service management",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1756a9",
+  "icons": [
+    { "src": "/icon.png", "sizes": "1024x1024", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icon.png", "sizes": "512x512",   "type": "image/png" },
+    { "src": "/icon.png", "sizes": "192x192",   "type": "image/png" }
+  ]
+}
