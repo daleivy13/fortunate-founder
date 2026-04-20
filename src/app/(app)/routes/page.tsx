@@ -1,94 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { Navigation, CheckCircle2, Clock, Car, Thermometer, Droplets, Wind, Sun, ChevronDown, ChevronUp, ClipboardList, Zap } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Navigation, CheckCircle2, Clock, Car, Thermometer, Droplets, Wind, Sun, ChevronDown, ChevronUp, ClipboardList, Zap, Loader2 } from "lucide-react";
 import { useGPS } from "@/hooks/useGPS";
+import { usePools } from "@/hooks/useData";
 import Link from "next/link";
-
-const MOCK_STOPS = [
-  {
-    id: 1,
-    pool: { id: 1, name: "Rivera Family", address: "2250 Sunset Ln, Mesa, AZ", volumeGallons: 12000, clientName: "Carlos Rivera", clientPhone: "(480) 555-0303", notes: "Gate code: 1847. Dog in yard — friendly." },
-    status: "complete", time: "8:45 AM",
-    brief: { priority: "normal", summary: "Completed — all good", actions: [], warnings: [] },
-    weather: { temp: 97, uvIndex: 9, windSpeed: 8, rain1h: 0 },
-    dueTasks: [],
-    lastReading: { freeChlorine: 3.1, ph: 7.5 },
-  },
-  {
-    id: 2,
-    pool: { id: 2, name: "Johnson Residence", address: "1420 Maple Dr, Scottsdale, AZ", volumeGallons: 15000, clientName: "Mike Johnson", clientPhone: "(480) 555-0101", notes: "Leave gate latched. Paid monthly." },
-    status: "current", time: "ETA 10:20 AM",
-    brief: {
-      priority: "critical", summary: "Critical — 5 items need attention",
-      actions: [
-        "🔴 SHOCK: Cl critically low (0.8 ppm) — shock treatment required",
-        "🟡 pH HIGH (8.4): Add muriatic acid — 18 fl oz per 15,000 gal",
-        "🔴 OVERDUE: Clean/backwash filter (12 days overdue)",
-        "🟡 DUE: Apply monthly algaecide",
-        "📝 Leave gate latched. Paid monthly.",
-      ],
-      warnings: [
-        "🌡️ Today is 97°F — increase all chemical doses by +40%",
-        "☀️ UV index 9 — verify CYA ≥ 50 ppm or chlorine will be gone by afternoon",
-      ],
-    },
-    weather: { temp: 97, uvIndex: 9, windSpeed: 8, rain1h: 0 },
-    dueTasks: [
-      { id: 1, name: "Clean/backwash filter", status: "overdue", icon: "🔧", daysUntilDue: -12 },
-      { id: 2, name: "Apply monthly algaecide", status: "due", icon: "🧪", daysUntilDue: 0 },
-    ],
-    lastReading: { freeChlorine: 0.8, ph: 8.4 },
-  },
-  {
-    id: 3,
-    pool: { id: 3, name: "Park Estates HOA", address: "800 Park Blvd, Tempe, AZ", volumeGallons: 50000, clientName: "Sarah Chen", clientPhone: "(480) 555-0202", notes: "Report to front office on arrival. Commercial grade chemicals only." },
-    status: "pending", time: "~12:30 PM",
-    brief: {
-      priority: "high", summary: "2 items need attention",
-      actions: [
-        "🟡 Cl at 1.2 ppm — bring to 3 ppm (add 40 fl oz liquid chlorine, +40% for heat)",
-        "🟡 DUE: Full 6-point chemistry test today",
-        "📝 Report to front office on arrival. Commercial grade only.",
-      ],
-      warnings: ["🌡️ Dose adjustment: +40% for 97°F heat"],
-    },
-    weather: { temp: 97, uvIndex: 9, windSpeed: 12, rain1h: 0 },
-    dueTasks: [{ id: 3, name: "Full 6-point chemistry test", status: "due", icon: "⚗️", daysUntilDue: 0 }],
-    lastReading: { freeChlorine: 1.2, ph: 7.4 },
-  },
-  {
-    id: 4,
-    pool: { id: 4, name: "Desert Oasis Resort", address: "5500 Resort Way, Gilbert, AZ", volumeGallons: 80000, clientName: "GM — Front Office", clientPhone: "(480) 555-0404", notes: "Use staff entrance. Log all chemicals with front desk. Bather load 200+ on weekends." },
-    status: "pending", time: "~2:15 PM",
-    brief: {
-      priority: "high", summary: "High bather load — extra attention needed",
-      actions: [
-        "📊 Full chemistry test required — last test was 5 days ago",
-        "🟡 Weekend bather load 200+ — expect high chlorine demand",
-        "🟡 DUE: Check & adjust water level",
-        "📝 Use staff entrance. Log chemicals with front desk.",
-      ],
-      warnings: ["🌡️ Dose adjustment: +40% for 97°F + high bather load = double demand"],
-    },
-    weather: { temp: 97, uvIndex: 8, windSpeed: 10, rain1h: 0 },
-    dueTasks: [{ id: 4, name: "Check & adjust water level", status: "due", icon: "📏", daysUntilDue: 0 }],
-    lastReading: null,
-  },
-  {
-    id: 5,
-    pool: { id: 5, name: "Thompson Backyard", address: "310 Oak Ave, Chandler, AZ", volumeGallons: 8000, clientName: "Beth Thompson", clientPhone: "(480) 555-0505", notes: "Key under mat on left. New puppy — check gate before entering." },
-    status: "pending", time: "~4:00 PM",
-    brief: {
-      priority: "normal", summary: "Standard service",
-      actions: ["📊 Chemistry test + standard maintenance", "📝 Key under mat. New puppy — check gate."],
-      warnings: [],
-    },
-    weather: { temp: 95, uvIndex: 7, windSpeed: 6, rain1h: 0 },
-    dueTasks: [],
-    lastReading: { freeChlorine: 2.5, ph: 7.4 },
-  },
-];
 
 const P_STYLES = {
   critical: { border: "border-red-200 bg-red-50",    badge: "bg-red-100 text-red-700"    },
@@ -96,24 +12,98 @@ const P_STYLES = {
   normal:   { border: "border-slate-200 bg-white",    badge: "bg-slate-100 text-slate-600" },
 };
 
+function buildStopFromPool(pool: any, idx: number) {
+  return {
+    id: pool.id,
+    pool: {
+      id: pool.id,
+      name: pool.name,
+      address: pool.address,
+      volumeGallons: pool.volumeGallons ?? 15000,
+      clientName: pool.clientName,
+      clientPhone: pool.clientPhone ?? "",
+      notes: pool.notes ?? "",
+    },
+    status: "pending" as const,
+    time: `Stop ${idx + 1}`,
+    brief: {
+      priority: "normal" as const,
+      summary: "Standard service",
+      actions: ["Chemistry test + standard maintenance", pool.notes ? `📝 ${pool.notes}` : ""].filter(Boolean),
+      warnings: [],
+    },
+    dueTasks: [] as any[],
+    lastReading: null,
+    weather: null,
+  };
+}
+
 export default function SmartRoutesPage() {
   const { isTracking, totalMiles, startTracking, stopTracking } = useGPS();
-  const [expanded,      setExpanded]     = useState<number | null>(2);
-  const [stops,         setStops]        = useState(MOCK_STOPS);
-  const [sessionMiles,  setSessionMiles] = useState(0);
+  const { data: poolsData, isLoading } = usePools();
 
-  const done         = stops.filter((s) => s.status === "complete").length;
-  const critical     = stops.filter((s) => s.brief.priority === "critical" && s.status !== "complete").length;
+  const [expanded,     setExpanded]    = useState<number | null>(null);
+  const [stops,        setStops]       = useState<any[]>([]);
+  const [sessionMiles, setSessionMiles] = useState(0);
+  const [weather,      setWeather]     = useState<any>(null);
+
+  // Build stops from real pools whenever pool data loads
+  useEffect(() => {
+    if (poolsData?.pools) {
+      const built = poolsData.pools.map(buildStopFromPool);
+      if (built.length > 0) built[0].status = "current";
+      setStops(built);
+      if (built.length > 0) setExpanded(built[0].id);
+    }
+  }, [poolsData]);
+
+  // Fetch weather intelligence
+  useEffect(() => {
+    fetch("/api/weather")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.temp) setWeather(d);
+      })
+      .catch(() => {});
+  }, []);
+
+  const done     = stops.filter((s) => s.status === "complete").length;
+  const critical = stops.filter((s) => s.brief.priority === "critical" && s.status !== "complete").length;
   const displayMiles = isTracking ? totalMiles : sessionMiles;
 
   const toggleGPS = async () => {
-    if (isTracking) { const m = await stopTracking(); setSessionMiles((p) => Math.round((p + m) * 10) / 10); }
-    else await startTracking();
+    if (isTracking) {
+      const m = await stopTracking();
+      setSessionMiles((p) => Math.round((p + m) * 10) / 10);
+    } else {
+      await startTracking();
+    }
+  };
+
+  const markComplete = (stopId: number) => {
+    setStops((prev) => {
+      const updated = prev.map((s) => s.id === stopId ? { ...s, status: "complete" } : s);
+      // Set next pending stop to current
+      const nextIdx = updated.findIndex((s) => s.status === "pending");
+      if (nextIdx !== -1) updated[nextIdx] = { ...updated[nextIdx], status: "current" };
+      return updated;
+    });
+    setExpanded(null);
   };
 
   const completeTask = (stopId: number, taskId: number) => {
-    setStops((prev) => prev.map((s) => s.id === stopId ? { ...s, dueTasks: s.dueTasks.filter((t: any) => t.id !== taskId) } : s));
+    setStops((prev) => prev.map((s) =>
+      s.id === stopId ? { ...s, dueTasks: s.dueTasks.filter((t: any) => t.id !== taskId) } : s
+    ));
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-24">
+        <Loader2 className="w-6 h-6 animate-spin text-pool-500" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -138,9 +128,9 @@ export default function SmartRoutesPage() {
           </div>
           <div className="flex gap-5 text-center">
             {[
-              { v: `${done}/${stops.length}`, l: "Stops"    },
-              { v: `${displayMiles.toFixed(1)} mi`, l: "Miles"    },
-              { v: String(critical), l: "Critical", red: critical > 0 },
+              { v: stops.length > 0 ? `${done}/${stops.length}` : "—", l: "Stops"    },
+              { v: `${displayMiles.toFixed(1)} mi`,                     l: "Miles"    },
+              { v: String(critical),                                     l: "Critical", red: critical > 0 },
             ].map((s) => (
               <div key={s.l}>
                 <p className={`text-base font-bold ${(s as any).red ? "text-red-600" : "text-slate-900"}`}>{s.v}</p>
@@ -152,49 +142,64 @@ export default function SmartRoutesPage() {
       </div>
 
       {/* Weather intelligence banner */}
-      <div className="card p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <Zap className="w-4 h-4 text-[#1756a9]" />
-          <h2 className="text-sm font-bold text-slate-900">Today's Weather Intelligence</h2>
-          <span className="text-xs text-slate-400 ml-auto">Scottsdale, AZ</span>
-        </div>
-        <div className="grid grid-cols-4 gap-2 mb-3">
-          {[
-            { icon: <Thermometer className="w-3.5 h-3.5 text-orange-500" />, label: "Temp",   value: "97°F",  warn: true  },
-            { icon: <Sun         className="w-3.5 h-3.5 text-yellow-500" />, label: "UV",     value: "9",     warn: true  },
-            { icon: <Wind        className="w-3.5 h-3.5 text-slate-400"  />, label: "Wind",   value: "8 mph", warn: false },
-            { icon: <Droplets    className="w-3.5 h-3.5 text-[#00c3e3]"   />, label: "Rain",   value: "0 mm",  warn: false },
-          ].map((s) => (
-            <div key={s.label} className={`text-center p-2.5 rounded-xl ${s.warn ? "bg-amber-50" : "bg-slate-50"}`}>
-              <div className="flex justify-center mb-1">{s.icon}</div>
-              <p className={`text-sm font-bold ${s.warn ? "text-amber-700" : "text-slate-900"}`}>{s.value}</p>
-              <p className="text-[10px] text-slate-400">{s.label}</p>
+      {weather && (
+        <div className="card p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Zap className="w-4 h-4 text-[#1756a9]" />
+            <h2 className="text-sm font-bold text-slate-900">Today's Weather Intelligence</h2>
+          </div>
+          <div className="grid grid-cols-4 gap-2 mb-3">
+            {[
+              { icon: <Thermometer className="w-3.5 h-3.5 text-orange-500" />, label: "Temp",  value: `${weather.temp}°F`,       warn: weather.temp > 90  },
+              { icon: <Sun         className="w-3.5 h-3.5 text-yellow-500" />, label: "UV",    value: String(weather.uvIndex),   warn: weather.uvIndex > 7 },
+              { icon: <Wind        className="w-3.5 h-3.5 text-slate-400"  />, label: "Wind",  value: `${weather.windSpeed} mph`, warn: false              },
+              { icon: <Droplets    className="w-3.5 h-3.5 text-[#00c3e3]"   />, label: "Rain",  value: `${weather.rain1h ?? 0} mm`, warn: false            },
+            ].map((s) => (
+              <div key={s.label} className={`text-center p-2.5 rounded-xl ${s.warn ? "bg-amber-50" : "bg-slate-50"}`}>
+                <div className="flex justify-center mb-1">{s.icon}</div>
+                <p className={`text-sm font-bold ${s.warn ? "text-amber-700" : "text-slate-900"}`}>{s.value}</p>
+                <p className="text-[10px] text-slate-400">{s.label}</p>
+              </div>
+            ))}
+          </div>
+          {weather.doseAdjustment && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+              <p className="text-xs text-amber-800 leading-relaxed">
+                <span className="font-bold">⚠️ Global dose adjustment: {weather.doseAdjustment}</span> — {weather.recommendation}
+              </p>
             </div>
-          ))}
+          )}
         </div>
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
-          <p className="text-xs text-amber-800 leading-relaxed">
-            <span className="font-bold">⚠️ Global dose adjustment today: +40%</span> — Extreme heat (97°F) + UV index 9 burns chlorine rapidly. Apply to all pools. Verify CYA ≥ 50 ppm at each stop.
-          </p>
-        </div>
-      </div>
+      )}
 
       {/* Progress */}
-      <div>
-        <div className="flex justify-between text-xs text-slate-500 mb-1.5">
-          <span>{done} of {stops.length} stops complete</span>
-          <span className="font-semibold text-[#1756a9]">{Math.round((done / stops.length) * 100)}%</span>
+      {stops.length > 0 && (
+        <div>
+          <div className="flex justify-between text-xs text-slate-500 mb-1.5">
+            <span>{done} of {stops.length} stops complete</span>
+            <span className="font-semibold text-[#1756a9]">{Math.round((done / stops.length) * 100)}%</span>
+          </div>
+          <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+            <div className="h-full bg-[#0891c4] rounded-full transition-all" style={{ width: `${(done / stops.length) * 100}%` }} />
+          </div>
         </div>
-        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-          <div className="h-full bg-[#0891c4] rounded-full transition-all" style={{ width: `${(done / stops.length) * 100}%` }} />
+      )}
+
+      {/* Empty state */}
+      {stops.length === 0 && (
+        <div className="card p-10 text-center text-slate-400">
+          <Navigation className="w-10 h-10 mx-auto mb-3 opacity-40" />
+          <p className="font-medium">No pools in your route</p>
+          <p className="text-sm mt-1">Add pools with service days to build your route</p>
+          <Link href="/pools/new"><button className="btn-primary mt-4 text-sm">+ Add Pool</button></Link>
         </div>
-      </div>
+      )}
 
       {/* Stop cards */}
       <div className="space-y-3">
-        {stops.map((stop, idx) => {
-          const s  = stop.status;
-          const p  = P_STYLES[stop.brief.priority as keyof typeof P_STYLES] ?? P_STYLES.normal;
+        {stops.map((stop) => {
+          const s   = stop.status;
+          const p   = P_STYLES[stop.brief.priority as keyof typeof P_STYLES] ?? P_STYLES.normal;
           const isExp = expanded === stop.id;
 
           return (
@@ -202,8 +207,10 @@ export default function SmartRoutesPage() {
               <div className="p-4">
                 <div className="flex items-start gap-3">
                   <div className="flex-shrink-0 mt-0.5">
-                    {s === "complete" ? <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-                      : s === "current" ? <div className="w-5 h-5 rounded-full border-2 border-blue-500 flex items-center justify-center"><div className="w-2 h-2 bg-[#0891c4] rounded-full animate-pulse" /></div>
+                    {s === "complete"
+                      ? <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                      : s === "current"
+                      ? <div className="w-5 h-5 rounded-full border-2 border-blue-500 flex items-center justify-center"><div className="w-2 h-2 bg-[#0891c4] rounded-full animate-pulse" /></div>
                       : <div className="w-5 h-5 rounded-full border-2 border-slate-200 flex items-center justify-center"><Clock className="w-2.5 h-2.5 text-slate-300" /></div>}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -211,31 +218,26 @@ export default function SmartRoutesPage() {
                       <div>
                         <p className={`text-sm font-bold ${s === "pending" ? "text-slate-400" : "text-slate-900"}`}>
                           {stop.pool.name}
-                          {s === "current" && <span className="ml-2 text-[10px] bg-[#1756a9] text-white px-1.5 py-0.5 rounded-full font-bold">EN ROUTE</span>}
+                          {s === "current" && <span className="ml-2 text-[10px] bg-[#1756a9] text-white px-1.5 py-0.5 rounded-full font-bold">NEXT</span>}
                         </p>
                         <p className="text-xs text-slate-400 truncate">{stop.pool.address}</p>
                       </div>
                       <div className="flex items-center gap-1.5 flex-shrink-0">
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${p.badge}`}>{stop.brief.priority}</span>
-                        <span className="text-xs text-slate-400">{stop.time}</span>
                       </div>
                     </div>
                     {s !== "complete" && <p className="text-xs text-slate-600 font-medium">{stop.brief.summary}</p>}
-                    {stop.dueTasks.length > 0 && s !== "complete" && (
-                      <div className="flex gap-1 mt-1.5 flex-wrap">
-                        {stop.dueTasks.map((t: any) => (
-                          <span key={t.id} className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${t.status === "overdue" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}>
-                            {t.icon} {t.name.split(" ")[0]}
-                          </span>
-                        ))}
-                      </div>
-                    )}
                   </div>
                 </div>
 
                 {s !== "complete" && (
-                  <button onClick={() => setExpanded(isExp ? null : stop.id)} className="w-full flex items-center justify-center gap-1 mt-3 pt-3 border-t border-slate-100 text-xs text-[#1756a9] font-medium">
-                    {isExp ? <><ChevronUp className="w-3.5 h-3.5" />Hide briefing</> : <><ChevronDown className="w-3.5 h-3.5" />Full briefing ({stop.brief.actions.length} items)</>}
+                  <button
+                    onClick={() => setExpanded(isExp ? null : stop.id)}
+                    className="w-full flex items-center justify-center gap-1 mt-3 pt-3 border-t border-slate-100 text-xs text-[#1756a9] font-medium"
+                  >
+                    {isExp
+                      ? <><ChevronUp className="w-3.5 h-3.5" />Hide details</>
+                      : <><ChevronDown className="w-3.5 h-3.5" />View details</>}
                   </button>
                 )}
               </div>
@@ -280,10 +282,31 @@ export default function SmartRoutesPage() {
                     </div>
                   )}
                   <div className="p-4 flex gap-2">
-                    <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(stop.pool.address)}`} target="_blank" rel="noopener noreferrer" className="btn-secondary flex-1 text-xs py-2 text-center no-underline">Navigate</a>
-                    <a href={`tel:${stop.pool.clientPhone}`} className="btn-outline flex-1 text-xs py-2 text-center no-underline">Call</a>
-                    <Link href={`/reports?pool=${stop.pool.id}`}><button className="btn-primary text-xs py-2 px-4">+ Report</button></Link>
+                    <a
+                      href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(stop.pool.address)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn-secondary flex-1 text-xs py-2 text-center no-underline"
+                    >
+                      Navigate
+                    </a>
+                    {stop.pool.clientPhone && (
+                      <a href={`tel:${stop.pool.clientPhone}`} className="btn-outline flex-1 text-xs py-2 text-center no-underline">Call</a>
+                    )}
+                    <Link href={`/reports?pool=${stop.pool.id}`}>
+                      <button className="btn-primary text-xs py-2 px-4">+ Report</button>
+                    </Link>
                   </div>
+                  {s !== "complete" && (
+                    <div className="px-4 pb-4">
+                      <button
+                        onClick={() => markComplete(stop.id)}
+                        className="w-full btn-primary bg-emerald-500 hover:bg-emerald-600 border-emerald-500 text-sm"
+                      >
+                        <CheckCircle2 className="w-4 h-4" /> Mark Stop Complete
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -295,9 +318,18 @@ export default function SmartRoutesPage() {
       <div className="card p-4 mb-6">
         <div className="flex items-center gap-2 mb-3"><Car className="w-4 h-4 text-[#1756a9]" /><h2 className="font-bold text-slate-900 text-sm">Mileage Log</h2></div>
         <div className="flex gap-3">
-          <div className="flex-1 text-center bg-slate-50 rounded-xl py-3"><p className="text-lg font-bold">{displayMiles.toFixed(1)} mi</p><p className="text-xs text-slate-400">Today</p></div>
-          <div className="flex-1 text-center bg-emerald-50 rounded-xl py-3"><p className="text-lg font-bold text-emerald-600">${(displayMiles * 0.67).toFixed(2)}</p><p className="text-xs text-slate-400">Tax deduction</p></div>
-          <div className="flex-1 text-center bg-[#e8f1fc] rounded-xl py-3"><p className="text-lg font-bold text-[#1756a9]">487 mi</p><p className="text-xs text-slate-400">This month</p></div>
+          <div className="flex-1 text-center bg-slate-50 rounded-xl py-3">
+            <p className="text-lg font-bold">{displayMiles.toFixed(1)} mi</p>
+            <p className="text-xs text-slate-400">Today</p>
+          </div>
+          <div className="flex-1 text-center bg-emerald-50 rounded-xl py-3">
+            <p className="text-lg font-bold text-emerald-600">${(displayMiles * 0.67).toFixed(2)}</p>
+            <p className="text-xs text-slate-400">Tax deduction</p>
+          </div>
+          <div className="flex-1 text-center bg-[#e8f1fc] rounded-xl py-3">
+            <p className="text-lg font-bold text-[#1756a9]">{stops.length} stops</p>
+            <p className="text-xs text-slate-400">Today's route</p>
+          </div>
         </div>
       </div>
     </div>

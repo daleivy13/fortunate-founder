@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { Check, Zap, TrendingUp, Building2, Gift } from "lucide-react";
+import { Check, Zap, TrendingUp, Building2, Gift, Loader2 } from "lucide-react";
 
 const PLANS = [
   {
@@ -91,10 +91,45 @@ const ADDONS = [
 ];
 
 export default function SettingsPage() {
-  const { user, signOut } = useAuth();
+  const { user, company, signOut, refreshCompany } = useAuth();
   const [tab, setTab] = useState<"billing" | "profile" | "addons">("billing");
   const [loading, setLoading] = useState<string | null>(null);
   const [annual, setAnnual] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileSaved, setProfileSaved] = useState(false);
+  const [profileError, setProfileError] = useState("");
+  const nameRef        = useRef<HTMLInputElement>(null);
+  const phoneRef       = useRef<HTMLInputElement>(null);
+  const companyNameRef = useRef<HTMLInputElement>(null);
+
+  const saveProfile = async () => {
+    if (!user) return;
+    setProfileSaving(true);
+    setProfileError("");
+    try {
+      const res = await fetch("/api/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          uid:         user.uid,
+          displayName: nameRef.current?.value || null,
+          phone:       phoneRef.current?.value || null,
+          companyName: companyNameRef.current?.value || null,
+        }),
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error ?? "Save failed");
+      }
+      await refreshCompany();
+      setProfileSaved(true);
+      setTimeout(() => setProfileSaved(false), 2000);
+    } catch (err: any) {
+      setProfileError(err.message ?? "Failed to save");
+    } finally {
+      setProfileSaving(false);
+    }
+  };
 
   const subscribe = async (planId: string) => {
     if (planId === "starter") return;
@@ -281,11 +316,34 @@ export default function SettingsPage() {
       {tab === "profile" && (
         <div className="card p-6 max-w-lg space-y-4">
           <h2 className="font-bold text-slate-900">Profile</h2>
-          <div><label className="label">Display Name</label><input className="input" defaultValue={user?.displayName ?? ""} /></div>
-          <div><label className="label">Email</label><input className="input" defaultValue={user?.email ?? ""} disabled className="input opacity-60 cursor-not-allowed" /></div>
-          <div><label className="label">Phone</label><input className="input" placeholder="(480) 555-0000" /></div>
-          <div><label className="label">Company Name</label><input className="input" placeholder="Sunbelt Pool Services" /></div>
-          <button className="btn-primary">Save Changes</button>
+
+          {profileError && (
+            <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-2.5 text-sm">{profileError}</div>
+          )}
+
+          <div>
+            <label className="label">Display Name</label>
+            <input ref={nameRef} className="input" defaultValue={user?.displayName ?? ""} />
+          </div>
+          <div>
+            <label className="label">Email</label>
+            <input className="input opacity-60 cursor-not-allowed" defaultValue={user?.email ?? ""} disabled />
+          </div>
+          <div>
+            <label className="label">Phone</label>
+            <input ref={phoneRef} className="input" placeholder="(480) 555-0000" />
+          </div>
+          <div>
+            <label className="label">Company Name</label>
+            <input ref={companyNameRef} className="input" defaultValue={company?.name ?? ""} placeholder="Sunbelt Pool Services" />
+          </div>
+
+          <button onClick={saveProfile} disabled={profileSaving} className="btn-primary">
+            {profileSaving
+              ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</>
+              : profileSaved ? "Saved ✓" : "Save Changes"}
+          </button>
+
           <div className="pt-4 border-t border-slate-100">
             <button onClick={signOut} className="text-sm text-red-500 hover:text-red-600 font-medium">
               Sign out

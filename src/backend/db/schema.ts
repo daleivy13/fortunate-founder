@@ -42,6 +42,11 @@ export const companies = pgTable("companies", {
   address: text("address"),
   phone: text("phone"),
   logoUrl: text("logo_url"),
+  // QuickBooks Online OAuth tokens (stored encrypted in production)
+  qbAccessToken: text("qb_access_token"),
+  qbRefreshToken: text("qb_refresh_token"),
+  qbRealmId: text("qb_realm_id"),
+  qbTokenExpiresAt: timestamp("qb_token_expires_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

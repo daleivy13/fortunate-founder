@@ -1,18 +1,18 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
-import { FileText, Plus, CheckCircle2, Clock, Send, Download, Camera, Loader2, ArrowLeft } from "lucide-react";
+import { useState, useRef } from "react";
+import { useSearchParams } from "next/navigation";
+import { FileText, Plus, CheckCircle2, Send, Download, Camera, Loader2, ArrowLeft, X } from "lucide-react";
 import { useReports, useCreateReport, usePools } from "@/hooks/useData";
 import Link from "next/link";
 
 const CHECKS_LABELS = [
-  { key: "skimmed",         label: "Skimmed" },
-  { key: "brushed",         label: "Brushed walls & floor" },
-  { key: "vacuumed",        label: "Vacuumed" },
-  { key: "filterCleaned",   label: "Filter cleaned/inspected" },
-  { key: "chemicalsAdded",  label: "Chemicals added" },
-  { key: "equipmentChecked",label: "Equipment checked" },
+  { key: "skimmed",          label: "Skimmed" },
+  { key: "brushed",          label: "Brushed walls & floor" },
+  { key: "vacuumed",         label: "Vacuumed" },
+  { key: "filterCleaned",    label: "Filter cleaned/inspected" },
+  { key: "chemicalsAdded",   label: "Chemicals added" },
+  { key: "equipmentChecked", label: "Equipment checked" },
 ];
 
 const STATUS_DISPLAY: Record<string, { label: string; cls: string }> = {
@@ -41,7 +41,7 @@ function ReportList({ onNew }: { onNew: () => void }) {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Service Reports</h1>
           <p className="text-slate-500 text-sm mt-1">
-            {isLoading ? "Loading..." : `${reports.length} reports`}
+            {isLoading ? "Loading..." : `${reports.length} report${reports.length !== 1 ? "s" : ""}`}
           </p>
         </div>
         <button onClick={onNew} className="btn-primary">
@@ -71,12 +71,13 @@ function ReportList({ onNew }: { onNew: () => void }) {
 
       <div className="space-y-3">
         {filtered.map((item: any) => {
-          const r = item.report ?? item;
+          const r    = item.report ?? item;
           const pool = item.pool;
-          const s = STATUS_DISPLAY[r.status] ?? STATUS_DISPLAY.complete;
+          const s    = STATUS_DISPLAY[r.status] ?? STATUS_DISPLAY.complete;
           const date = r.servicedAt
             ? new Date(r.servicedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })
             : "—";
+          const photos: string[] = r.photos ? JSON.parse(r.photos) : [];
 
           return (
             <div key={r.id} className="card p-5">
@@ -114,19 +115,21 @@ function ReportList({ onNew }: { onNew: () => void }) {
                 ))}
               </div>
 
+              {photos.length > 0 && (
+                <div className="flex gap-2 mb-3 flex-wrap">
+                  {photos.map((url, i) => (
+                    <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                      <img src={url} alt={`Photo ${i + 1}`} className="w-16 h-16 object-cover rounded-lg border border-slate-200" />
+                    </a>
+                  ))}
+                </div>
+              )}
+
               {r.techNotes && (
                 <p className="text-xs text-slate-500 bg-slate-50 rounded-lg px-3 py-2">{r.techNotes}</p>
               )}
               {r.issuesFound && (
                 <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mt-2">⚠ {r.issuesFound}</p>
-              )}
-
-              {r.status === "pending" && (
-                <div className="flex gap-2 mt-3 pt-3 border-t border-slate-100">
-                  <a href={`/api/reports/${r.id}/pdf`} target="_blank" rel="noopener noreferrer" className="btn-outline text-sm flex-1 text-center">
-                    <Send className="w-4 h-4 inline mr-1" /> View PDF
-                  </a>
-                </div>
               )}
             </div>
           );
@@ -151,23 +154,55 @@ function NewReportForm({ onBack, defaultPoolId }: { onBack: () => void; defaultP
   const { data: poolsData } = usePools();
   const pools = poolsData?.pools ?? [];
 
-  const [poolId, setPoolId] = useState(defaultPoolId ?? "");
-  const [checks, setChecks] = useState({
+  const [poolId,   setPoolId]  = useState(defaultPoolId ?? "");
+  const [checks,   setChecks]  = useState({
     skimmed: false, brushed: false, vacuumed: false,
     filterCleaned: false, chemicalsAdded: false, equipmentChecked: false,
   });
-  const [cl, setCl] = useState("");
-  const [ph, setPh] = useState("");
-  const [ta, setTa] = useState("");
-  const [temp, setTemp] = useState("");
-  const [issues, setIssues] = useState("");
-  const [notes, setNotes] = useState("");
-  const [done, setDone] = useState(false);
+  const [cl,      setCl]      = useState("");
+  const [ph,      setPh]      = useState("");
+  const [ta,      setTa]      = useState("");
+  const [temp,    setTemp]    = useState("");
+  const [issues,  setIssues]  = useState("");
+  const [notes,   setNotes]   = useState("");
+  const [photos,  setPhotos]  = useState<string[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [done,    setDone]    = useState(false);
   const [reportId, setReportId] = useState<number | null>(null);
-  const [error, setError] = useState("");
+  const [error,   setError]   = useState("");
+
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const toggle = (k: keyof typeof checks) =>
     setChecks((c) => ({ ...c, [k]: !c[k] }));
+
+  const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+    setUploading(true);
+    try {
+      const urls = await Promise.all(
+        files.map(async (file) => {
+          const fd = new FormData();
+          fd.append("file", file);
+          fd.append("poolId", poolId || "0");
+          const res = await fetch("/api/upload", { method: "POST", body: fd });
+          if (!res.ok) throw new Error("Upload failed");
+          const { url } = await res.json();
+          return url as string;
+        })
+      );
+      setPhotos((p) => [...p, ...urls]);
+    } catch (err: any) {
+      setError(err.message ?? "Photo upload failed");
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  const removePhoto = (idx: number) =>
+    setPhotos((p) => p.filter((_, i) => i !== idx));
 
   const handleSubmit = async () => {
     if (!poolId) { setError("Please select a pool"); return; }
@@ -175,13 +210,14 @@ function NewReportForm({ onBack, defaultPoolId }: { onBack: () => void; defaultP
     try {
       const res = await createReport({
         poolId,
-        freeChlorine: cl || null,
-        ph: ph || null,
-        totalAlkalinity: ta || null,
-        waterTemp: temp || null,
+        freeChlorine:    cl    || null,
+        ph:              ph    || null,
+        totalAlkalinity: ta    || null,
+        waterTemp:       temp  || null,
         ...checks,
         issuesFound: issues || null,
-        techNotes: notes || null,
+        techNotes:   notes  || null,
+        photos:      photos.length > 0 ? photos : null,
       });
       setReportId(res.report.id);
       setDone(true);
@@ -234,11 +270,7 @@ function NewReportForm({ onBack, defaultPoolId }: { onBack: () => void; defaultP
               <label className="label">Pool <span className="text-red-500">*</span></label>
               <select className="input" value={poolId} onChange={(e) => setPoolId(e.target.value)}>
                 <option value="">Select pool...</option>
-                {pools.length > 0
-                  ? pools.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)
-                  : ["Johnson Residence", "Park Estates HOA", "Rivera Family", "Desert Oasis Resort", "Thompson Backyard"]
-                      .map((n, i) => <option key={i} value={i + 1}>{n}</option>)
-                }
+                {pools.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -304,28 +336,58 @@ function NewReportForm({ onBack, defaultPoolId }: { onBack: () => void; defaultP
             <h2 className="font-bold text-slate-900 mb-3">Tech Notes</h2>
             <textarea
               className="input resize-none"
-              rows={5}
-              placeholder="Chemicals added, observations, customer requests, gate code..."
+              rows={4}
+              placeholder="Chemicals added, observations, customer requests..."
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
             />
           </div>
 
-          {/* Photos placeholder */}
+          {/* Photos */}
           <div className="card p-5">
             <h2 className="font-bold text-slate-900 mb-3 flex items-center gap-2">
               <Camera className="w-4 h-4" /> Photos
             </h2>
-            <div className="border-2 border-dashed border-slate-200 rounded-xl p-8 text-center text-slate-400 cursor-pointer hover:border-pool-300 hover:bg-pool-50 transition-colors">
-              <Camera className="w-8 h-8 mx-auto mb-2 opacity-40" />
-              <p className="text-sm font-medium">Tap to add photos</p>
-              <p className="text-xs mt-1">AI will auto-tag issues</p>
-            </div>
+
+            {photos.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-3">
+                {photos.map((url, i) => (
+                  <div key={i} className="relative">
+                    <img src={url} alt={`Photo ${i + 1}`} className="w-20 h-20 object-cover rounded-xl border border-slate-200" />
+                    <button
+                      onClick={() => removePhoto(i)}
+                      className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/heic"
+              multiple
+              className="hidden"
+              onChange={handlePhotoSelect}
+            />
+            <button
+              onClick={() => fileRef.current?.click()}
+              disabled={uploading}
+              className="w-full border-2 border-dashed border-slate-200 rounded-xl p-6 text-center text-slate-400 hover:border-pool-300 hover:bg-pool-50 transition-colors"
+            >
+              {uploading
+                ? <><Loader2 className="w-5 h-5 mx-auto mb-1 animate-spin" /><p className="text-sm">Uploading...</p></>
+                : <><Camera className="w-6 h-6 mx-auto mb-1 opacity-40" /><p className="text-sm font-medium">Tap to add photos</p><p className="text-xs mt-0.5">JPEG, PNG, WebP, HEIC · max 10MB each</p></>
+              }
+            </button>
           </div>
 
           {/* Submit */}
           <div className="space-y-2">
-            <button onClick={handleSubmit} disabled={isPending} className="btn-primary w-full">
+            <button onClick={handleSubmit} disabled={isPending || uploading} className="btn-primary w-full">
               {isPending
                 ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</>
                 : <><Send className="w-4 h-4" /> Save Report & Generate PDF</>
@@ -342,7 +404,7 @@ function NewReportForm({ onBack, defaultPoolId }: { onBack: () => void; defaultP
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function ReportsPage() {
   const searchParams = useSearchParams();
-  const defaultPool = searchParams.get("pool") ?? undefined;
+  const defaultPool  = searchParams.get("pool") ?? undefined;
   const [showNew, setShowNew] = useState(!!defaultPool);
 
   return showNew

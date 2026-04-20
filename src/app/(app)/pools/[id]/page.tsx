@@ -4,9 +4,11 @@ import { useParams, useRouter } from "next/navigation";
 import { usePool } from "@/hooks/useData";
 import {
   ArrowLeft, Waves, Phone, Mail, MapPin, FlaskConical,
-  FileText, Edit, AlertTriangle, CheckCircle2, Clock,
+  FileText, Edit, AlertTriangle, CheckCircle2, Clock, Link2,
 } from "lucide-react";
 import Link from "next/link";
+import { useAuth } from "@/contexts/AuthContext";
+import { useState } from "react";
 
 // Fallback mock data if DB not connected yet
 const MOCK = {
@@ -29,7 +31,24 @@ const CHEM_STATUS = (val: number | null, min: number, max: number) => {
 export default function PoolDetailPage() {
   const { id } = useParams();
   const router = useRouter();
+  const { company } = useAuth();
   const { data, isLoading } = usePool(parseInt(id as string));
+  const [copiedPortal, setCopiedPortal] = useState(false);
+
+  const copyPortalLink = async () => {
+    if (!company) return;
+    try {
+      const res = await fetch("/api/portal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ poolId: parseInt(id as string), companyId: company.id }),
+      });
+      const { url } = await res.json();
+      await navigator.clipboard.writeText(url);
+      setCopiedPortal(true);
+      setTimeout(() => setCopiedPortal(false), 2000);
+    } catch {}
+  };
 
   const { pool, readings, reports } = data ?? MOCK;
   const latest = readings?.[0];
@@ -105,6 +124,13 @@ export default function PoolDetailPage() {
                 </a>
               )}
             </div>
+            <button
+              onClick={copyPortalLink}
+              className="mt-4 w-full btn-outline text-xs py-2 flex items-center justify-center gap-2"
+            >
+              <Link2 className="w-3.5 h-3.5" />
+              {copiedPortal ? "Link copied!" : "Copy Client Portal Link"}
+            </button>
           </div>
 
           {/* Pool specs */}

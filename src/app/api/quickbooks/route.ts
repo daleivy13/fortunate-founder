@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/backend/db";
+import { companies } from "@/backend/db/schema";
+import { eq } from "drizzle-orm";
 
 // QuickBooks Online OAuth 2.0
 // Setup: https://developer.intuit.com → Create app → Get Client ID + Secret
@@ -15,20 +18,21 @@ export async function GET(req: NextRequest) {
 
   // Start OAuth flow
   if (action === "connect") {
-    const clientId   = process.env.QUICKBOOKS_CLIENT_ID;
-    const appUrl     = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+    const clientId    = process.env.QUICKBOOKS_CLIENT_ID;
+    const appUrl      = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
     const redirectUri = `${appUrl}/api/quickbooks?action=callback`;
+    const companyId   = searchParams.get("companyId") ?? "";
 
     if (!clientId) {
       return NextResponse.json({ error: "Add QUICKBOOKS_CLIENT_ID to .env.local" }, { status: 400 });
     }
 
     const params = new URLSearchParams({
-      client_id:    clientId,
-      response_type:"code",
-      scope:        SCOPES,
-      redirect_uri: redirectUri,
-      state:        Math.random().toString(36).slice(2),
+      client_id:     clientId,
+      response_type: "code",
+      scope:         SCOPES,
+      redirect_uri:  redirectUri,
+      state:         `${Math.random().toString(36).slice(2)}_${companyId}`,
     });
 
     return NextResponse.redirect(`${QB_AUTH_URL}?${params}`);
@@ -37,7 +41,9 @@ export async function GET(req: NextRequest) {
   // OAuth callback
   if (action === "callback") {
     const code        = searchParams.get("code");
-    const realmId     = searchParams.get("realmId"); // QuickBooks company ID
+    const realmId     = searchParams.get("realmId");
+    const stateParts  = (searchParams.get("state") ?? "").split("_");
+    const companyId   = stateParts[stateParts.length - 1];
     const clientId    = process.env.QUICKBOOKS_CLIENT_ID;
     const clientSecret= process.env.QUICKBOOKS_CLIENT_SECRET;
     const appUrl      = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
@@ -55,12 +61,21 @@ export async function GET(req: NextRequest) {
           "Content-Type":  "application/x-www-form-urlencoded",
           Authorization:   `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`,
         },
-        body: new URLSearchParams({ grant_type: "authorization_code", code, redirect_uri: redirectUri }),
+        body: new URLSearchParams({ grant_type: "authorization_code", code: code!, redirect_uri: redirectUri }),
       });
       const tokens = await tokenRes.json();
 
-      // Store tokens (in production: save to DB encrypted)
-      // tokens.access_token, tokens.refresh_token, realmId
+      if (companyId && !isNaN(parseInt(companyId))) {
+        await db
+          .update(companies)
+          .set({
+            qbAccessToken:    tokens.access_token,
+            qbRefreshToken:   tokens.refresh_token,
+            qbRealmId:        realmId,
+            qbTokenExpiresAt: new Date(Date.now() + (tokens.expires_in ?? 3600) * 1000),
+          })
+          .where(eq(companies.id, parseInt(companyId)));
+      }
 
       return NextResponse.redirect(`${appUrl}/settings?qb=connected&realm=${realmId}`);
     } catch {

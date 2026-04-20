@@ -7,7 +7,7 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const companyId = searchParams.get("companyId");
-    const poolId = searchParams.get("poolId");
+    const poolId    = searchParams.get("poolId");
 
     let rows;
     if (poolId) {
@@ -17,7 +17,6 @@ export async function GET(req: NextRequest) {
         .where(eq(serviceReports.poolId, parseInt(poolId)))
         .orderBy(desc(serviceReports.servicedAt));
     } else {
-      // Join with pools to filter by company
       rows = await db
         .select({ report: serviceReports, pool: pools })
         .from(serviceReports)
@@ -45,46 +44,54 @@ export async function POST(req: NextRequest) {
       issuesFound, techNotes, photos,
     } = body;
 
-    // Save chemistry reading first
-    let chemReadingId = null;
-    if (freeChlorine || ph) {
-      const [reading] = await db
-        .insert(chemistryReadings)
-        .values({
-          poolId: parseInt(poolId),
-          techId: techId || null,
-          freeChlorine: freeChlorine ? parseFloat(freeChlorine) : null,
-          ph: ph ? parseFloat(ph) : null,
-          totalAlkalinity: totalAlkalinity ? parseFloat(totalAlkalinity) : null,
-          calciumHardness: calciumHardness ? parseFloat(calciumHardness) : null,
-          cyanuricAcid: cyanuricAcid ? parseFloat(cyanuricAcid) : null,
-          waterTemp: waterTemp ? parseFloat(waterTemp) : null,
-        })
-        .returning();
-      chemReadingId = reading.id;
+    if (!poolId) {
+      return NextResponse.json({ error: "poolId is required" }, { status: 400 });
     }
 
-    // Create service report
-    const [report] = await db
-      .insert(serviceReports)
-      .values({
-        poolId: parseInt(poolId),
-        techId: techId || null,
-        routeId: routeId ? parseInt(routeId) : null,
-        chemReadingId,
-        status: "complete",
-        skimmed: skimmed ?? false,
-        brushed: brushed ?? false,
-        vacuumed: vacuumed ?? false,
-        filterCleaned: filterCleaned ?? false,
-        chemicalsAdded: chemicalsAdded ?? false,
-        equipmentChecked: equipmentChecked ?? false,
-        chemicalsUsed: chemicalsUsed ? JSON.stringify(chemicalsUsed) : null,
-        issuesFound: issuesFound || null,
-        techNotes: techNotes || null,
-        photos: photos ? JSON.stringify(photos) : null,
-      })
-      .returning();
+    // Use a transaction so chemistry reading and report are created atomically
+    const report = await db.transaction(async (tx) => {
+      let chemReadingId: number | null = null;
+
+      if (freeChlorine || ph) {
+        const [reading] = await tx
+          .insert(chemistryReadings)
+          .values({
+            poolId:          parseInt(poolId),
+            techId:          techId || null,
+            freeChlorine:    freeChlorine    ? parseFloat(freeChlorine)    : null,
+            ph:              ph              ? parseFloat(ph)              : null,
+            totalAlkalinity: totalAlkalinity ? parseFloat(totalAlkalinity) : null,
+            calciumHardness: calciumHardness ? parseFloat(calciumHardness) : null,
+            cyanuricAcid:    cyanuricAcid    ? parseFloat(cyanuricAcid)    : null,
+            waterTemp:       waterTemp       ? parseFloat(waterTemp)       : null,
+          })
+          .returning();
+        chemReadingId = reading.id;
+      }
+
+      const [created] = await tx
+        .insert(serviceReports)
+        .values({
+          poolId:          parseInt(poolId),
+          techId:          techId  || null,
+          routeId:         routeId ? parseInt(routeId) : null,
+          chemReadingId,
+          status:          "complete",
+          skimmed:         skimmed         ?? false,
+          brushed:         brushed         ?? false,
+          vacuumed:        vacuumed        ?? false,
+          filterCleaned:   filterCleaned   ?? false,
+          chemicalsAdded:  chemicalsAdded  ?? false,
+          equipmentChecked: equipmentChecked ?? false,
+          chemicalsUsed:   chemicalsUsed ? JSON.stringify(chemicalsUsed) : null,
+          issuesFound:     issuesFound  || null,
+          techNotes:       techNotes    || null,
+          photos:          photos       ? JSON.stringify(photos)       : null,
+        })
+        .returning();
+
+      return created;
+    });
 
     return NextResponse.json({ report }, { status: 201 });
   } catch (err: any) {
