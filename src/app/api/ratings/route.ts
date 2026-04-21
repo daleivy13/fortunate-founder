@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/backend/db";
 import { sql } from "drizzle-orm";
+import { requireAuth } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
+  const { auth, error } = await requireAuth(req);
+  if (error) return error;
+
   const { searchParams } = new URL(req.url);
   const companyId = searchParams.get("companyId");
   const techId    = searchParams.get("techId");

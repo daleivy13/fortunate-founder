@@ -61,7 +61,7 @@ const PLANS = [
     notIncluded: [],
   },
   {
-    id: "large",
+    id: "enterprise",
     name: "Enterprise",
     price: 399,
     icon: Building2,
@@ -82,12 +82,12 @@ const PLANS = [
 ];
 
 const ADDONS = [
-  { name: "Customer Portal", price: "$49/mo", desc: "Clients log in to view reports and pay invoices" },
-  { name: "White Label", price: "$79/mo", desc: "Your branding on all reports and client-facing pages" },
-  { name: "SMS Notifications", price: "$29/mo", desc: "Auto-text clients on service completion and invoice due dates" },
-  { name: "Route Optimization AI", price: "$39/mo", desc: "AI-optimized routes — cuts drive time by up to 30%" },
-  { name: "Tax Export Pack", price: "$49/year", desc: "One-click export for TurboTax, H&R Block, and accountants" },
-  { name: "Skimmer Import", price: "$99 once", desc: "Import all your data from Skimmer in one click" },
+  { id: "addon_portal",   name: "Customer Portal",     price: "$49/mo",    desc: "Clients log in to view reports and pay invoices" },
+  { id: "addon_whitelabel", name: "White Label",       price: "$79/mo",    desc: "Your branding on all reports and client-facing pages" },
+  { id: "addon_sms",     name: "SMS Notifications",    price: "$29/mo",    desc: "Auto-text clients on service completion and invoice due dates" },
+  { id: "addon_route",   name: "Route Optimization AI",price: "$39/mo",    desc: "AI-optimized routes — cuts drive time by up to 30%" },
+  { id: "addon_tax",     name: "Tax Export Pack",       price: "$49/year",  desc: "One-click export for TurboTax, H&R Block, and accountants" },
+  { id: "addon_skimmer", name: "Skimmer Import",        price: "$99 once",  desc: "Import all your data from Skimmer in one click" },
 ];
 
 export default function SettingsPage() {
@@ -303,8 +303,12 @@ export default function SettingsPage() {
                 </div>
                 <div className="text-right flex-shrink-0">
                   <p className="font-bold text-slate-900 whitespace-nowrap">{addon.price}</p>
-                  <button className="mt-2 text-xs bg-pool-50 text-pool-700 border border-pool-200 rounded-lg px-3 py-1.5 font-semibold hover:bg-pool-100 transition-colors whitespace-nowrap">
-                    Add to plan
+                  <button
+                    disabled={loading === addon.id}
+                    onClick={() => subscribe(addon.id)}
+                    className="mt-2 text-xs bg-pool-50 text-pool-700 border border-pool-200 rounded-lg px-3 py-1.5 font-semibold hover:bg-pool-100 transition-colors whitespace-nowrap disabled:opacity-50"
+                  >
+                    {loading === addon.id ? "Redirecting..." : "Add to plan"}
                   </button>
                 </div>
               </div>

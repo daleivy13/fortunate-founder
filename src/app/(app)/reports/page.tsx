@@ -24,7 +24,19 @@ const STATUS_DISPLAY: Record<string, { label: string; cls: string }> = {
 // ─── Report List ──────────────────────────────────────────────────────────────
 function ReportList({ onNew }: { onNew: () => void }) {
   const [filter, setFilter] = useState<"all" | "pending" | "sent">("all");
-  const { data, isLoading } = useReports();
+  const [sending, setSending] = useState<number | null>(null);
+  const { data, isLoading, refetch } = useReports();
+
+  const sendToClient = async (reportId: number) => {
+    setSending(reportId);
+    try {
+      const res = await fetch(`/api/reports/${reportId}/send`, { method: "POST" });
+      const json = await res.json();
+      if (!res.ok) alert(json.error ?? "Send failed");
+      else { await refetch(); }
+    } catch { alert("Send failed"); }
+    finally { setSending(null); }
+  };
 
   const reports: any[] = data?.reports ?? [];
 
@@ -130,6 +142,21 @@ function ReportList({ onNew }: { onNew: () => void }) {
               )}
               {r.issuesFound && (
                 <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mt-2">⚠ {r.issuesFound}</p>
+              )}
+
+              {r.status !== "sent" && pool?.clientEmail && (
+                <div className="mt-3 pt-3 border-t border-slate-100">
+                  <button
+                    onClick={() => sendToClient(r.id)}
+                    disabled={sending === r.id}
+                    className="btn-secondary text-xs py-1.5 px-3 w-full"
+                  >
+                    {sending === r.id
+                      ? <Loader2 className="w-3 h-3 animate-spin mx-auto" />
+                      : <><Send className="w-3 h-3" /> Email Report to {pool.clientName}</>
+                    }
+                  </button>
+                </div>
               )}
             </div>
           );

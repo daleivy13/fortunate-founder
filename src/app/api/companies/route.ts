@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/backend/db";
 import { companies, users } from "@/backend/db/schema";
 import { eq } from "drizzle-orm";
+import { requireAuth } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
+  const { auth, error } = await requireAuth(req);
+  if (error) return error;
+
   try {
     const body = await req.json();
     const { companyName, phone, address, ownerId, email, plan } = body;
@@ -16,7 +20,7 @@ export async function POST(req: NextRequest) {
         ownerId,
         phone: phone || null,
         address: address || null,
-        plan: plan ?? "small",
+        plan: plan ?? "starter",
         subscriptionStatus: "trialing",
         trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
       })
@@ -45,6 +49,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
+  const { auth, error } = await requireAuth(req);
+  if (error) return error;
+
   try {
     const { searchParams } = new URL(req.url);
     const ownerId = searchParams.get("ownerId");

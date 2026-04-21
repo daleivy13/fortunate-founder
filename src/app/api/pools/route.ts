@@ -2,23 +2,27 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/backend/db";
 import { pools, chemistryReadings } from "@/backend/db/schema";
 import { eq, desc } from "drizzle-orm";
+import { requireAuth } from "@/lib/auth";
+import { validateBody, CreatePoolSchema } from "@/lib/validation";
+import { cacheGetOrSet, cacheDel, CacheKeys } from "@/lib/cache";
 
 export async function GET(req: NextRequest) {
+  const { auth, error } = await requireAuth(req);
+  if (error) return error;
+
+  const { searchParams } = new URL(req.url);
+  const companyId = parseInt(searchParams.get("companyId") ?? "");
+  if (!companyId || isNaN(companyId)) {
+    return NextResponse.json({ error: "companyId required" }, { status: 400 });
+  }
+
   try {
-    const { searchParams } = new URL(req.url);
-    const companyId = searchParams.get("companyId");
-
-    if (!companyId) {
-      return NextResponse.json({ error: "companyId required" }, { status: 400 });
-    }
-
-    const rows = await db
-      .select()
-      .from(pools)
-      .where(eq(pools.companyId, parseInt(companyId)))
-      .orderBy(desc(pools.createdAt));
-
-    return NextResponse.json({ pools: rows });
+    const data = await cacheGetOrSet(
+      CacheKeys.pools(companyId),
+      () => db.select().from(pools).where(eq(pools.companyId, companyId)).orderBy(desc(pools.createdAt)),
+      300,
+    );
+    return NextResponse.json({ pools: data });
   } catch (err: any) {
     console.error("[api/pools GET]", err);
     return NextResponse.json({ error: err.message }, { status: 500 });
@@ -26,41 +30,18 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const { auth, error } = await requireAuth(req);
+  if (error) return error;
+
+  const body = await req.json().catch(() => null);
+  if (!body) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+
+  const { data, error: valErr } = validateBody(CreatePoolSchema, body);
+  if (valErr) return valErr;
+
   try {
-    const body = await req.json();
-    const {
-      companyId, name, clientName, clientEmail, clientPhone,
-      address, lat, lng, type, volumeGallons, notes,
-      monthlyRate, serviceDay,
-    } = body;
-
-    if (!companyId || !name || !clientName || !address) {
-      return NextResponse.json(
-        { error: "companyId, name, clientName, and address are required" },
-        { status: 400 }
-      );
-    }
-
-    const [inserted] = await db
-      .insert(pools)
-      .values({
-        companyId: parseInt(companyId),
-        name,
-        clientName,
-        clientEmail: clientEmail || null,
-        clientPhone: clientPhone || null,
-        address,
-        lat: lat ? parseFloat(lat) : null,
-        lng: lng ? parseFloat(lng) : null,
-        type: type || "residential",
-        volumeGallons: volumeGallons ? parseInt(volumeGallons) : null,
-        notes: notes || null,
-        monthlyRate: monthlyRate ? parseFloat(monthlyRate) : null,
-        serviceDay: serviceDay || null,
-        isActive: true,
-      })
-      .returning();
-
+    const [inserted] = await db.insert(pools).values({ ...data, clientName: data.clientName || "", isActive: true }).returning();
+    await cacheDel(CacheKeys.pools(data.companyId));
     return NextResponse.json({ pool: inserted }, { status: 201 });
   } catch (err: any) {
     console.error("[api/pools POST]", err);

@@ -56,7 +56,7 @@ export default function ChemistryPage() {
           <h2 className="font-bold text-slate-900 mb-4">{t("chemistry.readings")}</h2>
           <div className="space-y-1">
             {FIELDS.map((f,i)=>{
-              const v=parseFloat(vals[f.key])||0;
+              const v=parseFloat(vals[f.key as keyof typeof vals])||0;
               const warn=f.key==="freeChlorine"?(v<1||v>4):f.key==="ph"?(v<7.2||v>7.6):false;
               return (<div key={f.key} className={`flex items-center justify-between py-3 ${i<FIELDS.length-1?"border-b border-slate-100":""}`}>
                 <div><p className="text-sm font-medium text-slate-700">{f.label}</p>{f.target&&<p className="text-xs text-slate-400">Target: {f.target} {f.unit}</p>}</div>

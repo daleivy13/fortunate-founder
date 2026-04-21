@@ -19,15 +19,18 @@ export async function POST(req: NextRequest) {
 
   switch (event.type) {
     case "checkout.session.completed": {
-      const session = event.data.object as Stripe.CheckoutSession;
+      const session = event.data.object as Stripe.Checkout.Session;
       const userId = session.metadata?.userId;
       const plan = session.metadata?.plan;
-      if (userId && plan && session.mode === "subscription") {
+      const validPlans = ["starter","solo","growth","enterprise"] as const;
+      type ValidPlan = typeof validPlans[number];
+      const safePlan: ValidPlan | null = validPlans.includes(plan as any) ? (plan as ValidPlan) : null;
+      if (userId && safePlan && session.mode === "subscription") {
         await db.update(companies).set({
           stripeCustomerId: session.customer as string,
           stripeSubscriptionId: session.subscription as string,
           subscriptionStatus: "active",
-          plan: plan as "small" | "medium" | "large",
+          plan: safePlan,
         }).where(eq(companies.ownerId, userId));
       }
       if (session.mode === "payment") {

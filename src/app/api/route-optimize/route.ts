@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAuth } from "@/lib/auth";
 
 interface Stop { id: number; address: string; poolName: string; lat?: number; lng?: number; }
 interface OptimizedRoute { orderedStops: (Stop & { order: number })[]; totalDistanceMiles: number; estimatedMinutes: number; savingsMiles: number; }
 
-export async function POST(req: NextRequest): Promise<NextResponse> {
+export async function POST(req: NextRequest): Promise<Response> {
+  const { auth, error } = await requireAuth(req);
+  if (error) return error;
+
   try {
     const { stops, origin } = await req.json() as { stops: Stop[]; origin?: string };
 

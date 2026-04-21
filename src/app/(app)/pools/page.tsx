@@ -5,20 +5,12 @@ import { Search, Plus, Waves, Phone, Mail, MoreVertical, Loader2 } from "lucide-
 import Link from "next/link";
 import { usePools } from "@/hooks/useData";
 
-const MOCK_POOLS = [
-  { id: 1, name: "Johnson Residence", clientName: "Mike Johnson", address: "1420 Maple Dr, Scottsdale, AZ", clientPhone: "(480) 555-0101", clientEmail: "mjohnson@email.com", type: "residential", volumeGallons: 15000, monthlyRate: 150, serviceDay: "Mon/Thu" },
-  { id: 2, name: "Park Estates HOA", clientName: "Sarah Chen (HOA Mgr)", address: "800 Park Blvd, Tempe, AZ", clientPhone: "(480) 555-0202", clientEmail: "hoa@parkestates.com", type: "hoa", volumeGallons: 50000, monthlyRate: 400, serviceDay: "Tue/Fri" },
-  { id: 3, name: "Rivera Family", clientName: "Carlos Rivera", address: "2250 Sunset Ln, Mesa, AZ", clientPhone: "(480) 555-0303", clientEmail: "crivera@email.com", type: "residential", volumeGallons: 12000, monthlyRate: 120, serviceDay: "Wednesday" },
-  { id: 4, name: "Desert Oasis Resort", clientName: "GM — Front Office", address: "5500 Resort Way, Gilbert, AZ", clientPhone: "(480) 555-0404", clientEmail: "facilities@desertoasis.com", type: "commercial", volumeGallons: 80000, monthlyRate: 800, serviceDay: "Daily" },
-  { id: 5, name: "Thompson Backyard", clientName: "Beth Thompson", address: "310 Oak Ave, Chandler, AZ", clientPhone: "(480) 555-0505", clientEmail: "bthompson@email.com", type: "residential", volumeGallons: 8000, monthlyRate: 100, serviceDay: "Friday" },
-];
-
 export default function PoolsPage() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "residential" | "commercial" | "hoa">("all");
   const { data, isLoading, isError } = usePools();
 
-  const allPools = (data?.pools?.length ? data.pools : MOCK_POOLS) as typeof MOCK_POOLS;
+  const allPools = (data?.pools ?? []) as any[];
 
   const pools = allPools.filter((p) => {
     const q = search.toLowerCase();
@@ -83,7 +75,7 @@ export default function PoolsPage() {
 
       {isError && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800">
-          Could not load from database — showing demo data. Connect your DATABASE_URL to see live pools.
+          Could not load pools. Check your database connection and try refreshing.
         </div>
       )}
 
@@ -127,7 +119,7 @@ export default function PoolsPage() {
                   <Link href={`/chemistry?pool=${pool.id}`}>
                     <button className="text-xs btn-secondary py-1 px-2.5">⚗️ Chemistry</button>
                   </Link>
-                  <Link href={`/reports/new?pool=${pool.id}`}>
+                  <Link href={`/reports?pool=${pool.id}`}>
                     <button className="text-xs btn-primary py-1 px-2.5">+ Report</button>
                   </Link>
                 </div>

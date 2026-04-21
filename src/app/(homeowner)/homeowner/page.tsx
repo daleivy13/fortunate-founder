@@ -1,21 +1,16 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Waves, Zap, AlertTriangle, TrendingUp, Lock, MapPin, ShoppingCart } from "lucide-react";
+import { Waves, Zap, AlertTriangle, TrendingUp, Lock, MapPin, ShoppingCart, ChevronRight } from "lucide-react";
 import Link from "next/link";
 
-const MOCK_HISTORY = [
-  { date: "Apr 18", cl: 0.8, ph: 8.4, ta: 120, temp: 84 },
-  { date: "Apr 11", cl: 2.1, ph: 7.9, ta: 115, temp: 82 },
-  { date: "Apr 4",  cl: 2.8, ph: 7.5, ta: 110, temp: 79 },
-  { date: "Mar 28", cl: 3.0, ph: 7.4, ta: 105, temp: 76 },
-];
-
-const MOCK_PROS = [
-  { id: 1, name: "Marco's Pool Service", rating: 4.9, pools: 47, distance: "0.8 mi", initials: "MD", color: "#0ea5e9" },
-  { id: 2, name: "Sunbelt Pool Pros",    rating: 4.7, pools: 120, distance: "1.4 mi", initials: "SP", color: "#8b5cf6", featured: true },
-  { id: 3, name: "Desert Blue Pools",   rating: 4.8, pools: 38, distance: "2.1 mi", initials: "DB", color: "#1756a9" },
-];
+interface ChemReading {
+  date: string;
+  cl: number;
+  ph: number;
+  ta?: number;
+  temp?: number;
+}
 
 function ChemBadge({ label, value, good }: { label: string; value: number | string; good: boolean }) {
   return (
@@ -26,55 +21,107 @@ function ChemBadge({ label, value, good }: { label: string; value: number | stri
   );
 }
 
-export default function HomeownerDashboard() {
-  const [isPro, setIsPro]   = useState(false);
-  const [checksLeft, setChecksLeft] = useState(1);
-  const [showGate, setShowGate] = useState(false);
+function getGuestId(): string {
+  if (typeof window === "undefined") return "";
+  let id = localStorage.getItem("guestId");
+  if (!id) { id = Math.random().toString(36).slice(2); localStorage.setItem("guestId", id); }
+  return id;
+}
 
-  const latest = MOCK_HISTORY[0];
-  const clOk   = latest.cl >= 1 && latest.cl <= 4;
-  const phOk   = latest.ph >= 7.2 && latest.ph <= 7.6;
-  const allOk  = clOk && phOk;
+function loadHistory(): ChemReading[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem("chemHistory");
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+export default function HomeownerDashboard() {
+  const [isPro,       setIsPro]       = useState(false);
+  const [checksLeft,  setChecksLeft]  = useState(1);
+  const [history,     setHistory]     = useState<ChemReading[]>([]);
+  const [loaded,      setLoaded]      = useState(false);
+
+  useEffect(() => {
+    setHistory(loadHistory());
+    setLoaded(true);
+    const userId = getGuestId();
+    if (!userId) return;
+    fetch(`/api/homeowner/usage?userId=${userId}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (typeof d.checksRemaining === "number") setChecksLeft(d.checksRemaining);
+        if (d.isPro) setIsPro(true);
+      })
+      .catch(() => {});
+  }, []);
+
+  const latest  = history[0] ?? null;
+  const clOk    = latest ? latest.cl >= 1 && latest.cl <= 4 : true;
+  const phOk    = latest ? latest.ph >= 7.2 && latest.ph <= 7.6 : true;
+  const allOk   = !latest || (clOk && phOk);
+
+  const headerGradient = allOk
+    ? "bg-gradient-to-br from-[#1756a9] to-pool-600"
+    : "bg-gradient-to-br from-red-600 to-amber-500";
+
+  // Derive recommended chemicals based on latest reading
+  const chemRecs: { name: string; amount: string; price: string; link: string }[] = [];
+  if (latest) {
+    if (!phOk && latest.ph > 7.6)
+      chemRecs.push({ name: "Muriatic Acid 1 Gal", amount: "Lower pH", price: "$8.99", link: "https://www.amazon.com/s?k=muriatic+acid+pool" });
+    if (!phOk && latest.ph < 7.2)
+      chemRecs.push({ name: "Soda Ash (pH Up) 5 lb", amount: "Raise pH", price: "$12.99", link: "https://www.amazon.com/s?k=soda+ash+pool+ph" });
+    if (!clOk && latest.cl < 1)
+      chemRecs.push({ name: "Liquid Chlorine 1 Gal", amount: "Sanitize pool", price: "$6.99", link: "https://www.amazon.com/s?k=pool+liquid+chlorine" });
+    if (latest.ta !== undefined && (latest.ta < 80 || latest.ta > 120))
+      chemRecs.push({ name: "Sodium Bicarbonate 5 lb", amount: "Balance alkalinity", price: "$9.99", link: "https://www.amazon.com/s?k=pool+alkalinity+increaser" });
+  }
+  if (chemRecs.length === 0)
+    chemRecs.push({ name: "Shock Treatment 1 lb", amount: "Weekly maintenance", price: "$5.99", link: "https://www.amazon.com/s?k=pool+shock+treatment" });
 
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
-      <div className={`${allOk ? "bg-gradient-to-br from-[#1756a9] to-pool-600" : "bg-gradient-to-br from-red-600 to-amber-500"} text-white px-5 pt-12 pb-8`}>
+      <div className={`${headerGradient} text-white px-5 pt-12 pb-8`}>
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">
             <Waves className="w-6 h-6" />
             <span className="font-bold text-lg">PoolPal</span>
           </div>
-          <div className="flex items-center gap-2">
-            {!isPro && (
-              <button
-                onClick={() => setIsPro(true)}
-                className="text-xs bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-full font-semibold transition-colors"
-              >
-                Upgrade $9/mo
-              </button>
-            )}
-            {isPro && (
-              <span className="text-xs bg-white/20 px-3 py-1.5 rounded-full font-semibold">
-                Pool+ ✓
-              </span>
-            )}
-          </div>
+          {!isPro && (
+            <button
+              onClick={() => setIsPro(true)}
+              className="text-xs bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-full font-semibold transition-colors"
+            >
+              Upgrade $9/mo
+            </button>
+          )}
+          {isPro && (
+            <span className="text-xs bg-white/20 px-3 py-1.5 rounded-full font-semibold">Pool+ ✓</span>
+          )}
         </div>
 
         <div className="text-center">
           <p className="text-white/70 text-sm mb-1">Your pool status</p>
-          <h1 className="text-3xl font-bold mb-2">
-            {allOk ? "All Good 🌊" : "Needs Attention ⚠️"}
-          </h1>
-          <p className="text-white/80 text-sm">
-            {allOk
-              ? "Your pool chemistry is balanced"
-              : "pH is high — see recommendations below"}
-          </p>
+          {!loaded ? (
+            <h1 className="text-3xl font-bold mb-2">Loading…</h1>
+          ) : latest ? (
+            <>
+              <h1 className="text-3xl font-bold mb-2">{allOk ? "All Good 🌊" : "Needs Attention ⚠️"}</h1>
+              <p className="text-white/80 text-sm">
+                {allOk ? "Chemistry is balanced" : `${!clOk ? "Chlorine" : "pH"} out of range — check recommendations below`}
+              </p>
+            </>
+          ) : (
+            <>
+              <h1 className="text-3xl font-bold mb-2">No reading yet 🔬</h1>
+              <p className="text-white/80 text-sm">Run your first chemistry check below</p>
+            </>
+          )}
           {!isPro && (
             <div className="mt-3 bg-white/15 rounded-xl px-4 py-2 text-sm">
-              {checksLeft} free check remaining this week
+              {checksLeft > 0 ? `${checksLeft} free check remaining this week` : "Upgrade for unlimited checks"}
             </div>
           )}
         </div>
@@ -85,36 +132,45 @@ export default function HomeownerDashboard() {
         <div className="card p-4">
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-bold text-slate-900">Latest Reading</h2>
-            <span className="text-xs text-slate-400">{latest.date}</span>
-          </div>
-          <div className="grid grid-cols-4 gap-2">
-            <ChemBadge label="Cl" value={latest.cl} good={clOk} />
-            <ChemBadge label="pH" value={latest.ph} good={phOk} />
-            <ChemBadge label="TA" value={latest.ta} good={latest.ta >= 80 && latest.ta <= 120} />
-            <ChemBadge label="°F" value={latest.temp} good={true} />
+            {latest && <span className="text-xs text-slate-400">{latest.date}</span>}
           </div>
 
-          {!allOk && (
-            <div className="mt-3 bg-amber-50 border border-amber-200 rounded-xl p-3 flex gap-2.5">
-              <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-semibold text-amber-800">pH is too high (8.4)</p>
-                <p className="text-xs text-amber-700 mt-0.5">
-                  Add 6 fl oz muriatic acid per 10,000 gallons. Run pump for 4 hours then retest.
-                </p>
+          {latest ? (
+            <>
+              <div className={`grid gap-2 ${latest.ta !== undefined ? "grid-cols-4" : "grid-cols-2"}`}>
+                <ChemBadge label="Cl" value={latest.cl} good={clOk} />
+                <ChemBadge label="pH" value={latest.ph} good={phOk} />
+                {latest.ta   !== undefined && <ChemBadge label="TA"  value={latest.ta}   good={latest.ta >= 80 && latest.ta <= 120} />}
+                {latest.temp !== undefined && <ChemBadge label="°F"  value={latest.temp} good />}
               </div>
-            </div>
+              {!allOk && (
+                <div className="mt-3 bg-amber-50 border border-amber-200 rounded-xl p-3 flex gap-2.5">
+                  <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-amber-800">
+                    {!clOk && latest.cl < 1
+                      ? "Chlorine is too low — risk of algae. Add liquid chlorine immediately."
+                      : !phOk && latest.ph > 7.6
+                      ? `pH is too high (${latest.ph}) — add muriatic acid, then retest.`
+                      : !phOk && latest.ph < 7.2
+                      ? `pH is too low (${latest.ph}) — add soda ash, then retest.`
+                      : "Chemistry imbalance detected — see recommendations below."}
+                  </p>
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="text-sm text-slate-500 py-2">No reading recorded yet. Run a check to see your pool status.</p>
           )}
 
           <Link href="/homeowner/check">
             <button className="btn-primary w-full mt-3 text-sm">
               <Zap className="w-4 h-4" />
-              {checksLeft > 0 ? "Run Chemistry Check" : "Upgrade to Check Again"}
+              {checksLeft > 0 || isPro ? "Run Chemistry Check" : "Upgrade to Check Again"}
             </button>
           </Link>
         </div>
 
-        {/* History — locked for free users */}
+        {/* History */}
         <div className="card p-4">
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-bold text-slate-900 flex items-center gap-2">
@@ -125,34 +181,35 @@ export default function HomeownerDashboard() {
           </div>
 
           {isPro ? (
-            <div className="space-y-2">
-              {MOCK_HISTORY.map((r, i) => {
-                const rClOk = r.cl >= 1 && r.cl <= 4;
-                const rPhOk = r.ph >= 7.2 && r.ph <= 7.6;
-                return (
-                  <div key={i} className="flex items-center gap-3 py-2 border-b border-slate-100 last:border-0">
-                    <span className="text-xs text-slate-400 w-14">{r.date}</span>
-                    <div className="flex gap-3 flex-1">
-                      <span className={`text-xs font-semibold ${rClOk ? "text-emerald-600" : "text-red-600"}`}>Cl {r.cl}</span>
-                      <span className={`text-xs font-semibold ${rPhOk ? "text-emerald-600" : "text-amber-600"}`}>pH {r.ph}</span>
-                      <span className="text-xs text-slate-400">TA {r.ta}</span>
+            history.length > 0 ? (
+              <div className="space-y-2">
+                {history.slice(0, 10).map((r, i) => {
+                  const rClOk = r.cl >= 1 && r.cl <= 4;
+                  const rPhOk = r.ph >= 7.2 && r.ph <= 7.6;
+                  return (
+                    <div key={i} className="flex items-center gap-3 py-2 border-b border-slate-100 last:border-0">
+                      <span className="text-xs text-slate-400 w-14">{r.date}</span>
+                      <div className="flex gap-3 flex-1">
+                        <span className={`text-xs font-semibold ${rClOk ? "text-emerald-600" : "text-red-600"}`}>Cl {r.cl}</span>
+                        <span className={`text-xs font-semibold ${rPhOk ? "text-emerald-600" : "text-amber-600"}`}>pH {r.ph}</span>
+                        {r.ta !== undefined && <span className="text-xs text-slate-400">TA {r.ta}</span>}
+                      </div>
+                      {(!rClOk || !rPhOk) && <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />}
                     </div>
-                    {(!rClOk || !rPhOk) && <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />}
-                  </div>
-                );
-              })}
-              <p className="text-xs text-slate-400 pt-1">
-                💡 pH trending high for 3 weeks. High summer temps may be the cause.
-              </p>
-            </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-400 py-2">No history yet. Run your first check to start tracking.</p>
+            )
           ) : (
             <div className="relative">
               <div className="space-y-2 opacity-30 pointer-events-none select-none">
-                {MOCK_HISTORY.map((r, i) => (
+                {[1, 2, 3].map((i) => (
                   <div key={i} className="flex items-center gap-3 py-2 border-b border-slate-100">
-                    <span className="text-xs text-slate-400 w-14">{r.date}</span>
-                    <span className="text-xs font-semibold">Cl {r.cl}</span>
-                    <span className="text-xs font-semibold">pH {r.ph}</span>
+                    <span className="text-xs text-slate-400 w-14">—</span>
+                    <span className="text-xs font-semibold">Cl —</span>
+                    <span className="text-xs font-semibold">pH —</span>
                   </div>
                 ))}
               </div>
@@ -169,59 +226,45 @@ export default function HomeownerDashboard() {
           )}
         </div>
 
-        {/* Book a pro */}
+        {/* Find a pro */}
         <div className="card p-4">
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-bold text-slate-900 flex items-center gap-2">
               <MapPin className="w-4 h-4 text-pool-600" />
-              Local Pool Pros
+              Find a Local Pro
             </h2>
-            <span className="text-xs text-slate-400">Scottsdale, AZ</span>
           </div>
 
           {!allOk && (
             <div className="bg-pool-50 border border-pool-200 rounded-xl p-3 mb-3">
-              <p className="text-sm font-semibold text-pool-900">Your pool needs professional attention</p>
-              <p className="text-xs text-pool-700 mt-0.5">pH imbalance lasting 3+ weeks may indicate a deeper issue. A local pro can diagnose and fix it.</p>
+              <p className="text-sm font-semibold text-pool-900">Your pool may need professional attention</p>
+              <p className="text-xs text-pool-700 mt-0.5">Recurring chemistry issues can indicate equipment problems a local tech can diagnose.</p>
             </div>
           )}
 
-          <div className="space-y-2">
-            {MOCK_PROS.map((pro) => (
-              <div key={pro.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
-                <div
-                  className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
-                  style={{ backgroundColor: pro.color }}
-                >
-                  {pro.initials}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-slate-900 flex items-center gap-1">
-                    {pro.name}
-                    {pro.featured && <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-bold">Featured</span>}
-                  </p>
-                  <p className="text-xs text-slate-400">⭐ {pro.rating} · {pro.pools} pools · {pro.distance}</p>
-                </div>
-                <button className="text-xs text-pool-600 font-semibold bg-pool-50 border border-pool-200 px-3 py-1.5 rounded-lg hover:bg-pool-100 transition-colors">
-                  Book
-                </button>
-              </div>
-            ))}
-          </div>
+          <p className="text-sm text-slate-500 mb-3">
+            PoolPal-certified technicians in your area use professional-grade equipment and follow strict service standards.
+          </p>
+
+          <Link href="/homeowner/find-pro">
+            <button className="w-full flex items-center justify-between p-3 bg-pool-50 border border-pool-200 rounded-xl text-sm font-semibold text-pool-700 hover:bg-pool-100 transition-colors">
+              Search pool pros near you
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </Link>
         </div>
 
         {/* Chemical shopping list */}
         <div className="card p-4 mb-8">
           <h2 className="font-bold text-slate-900 flex items-center gap-2 mb-3">
             <ShoppingCart className="w-4 h-4 text-pool-600" />
-            Shop Chemicals
+            Recommended Chemicals
           </h2>
-          <p className="text-xs text-slate-500 mb-3">Based on your readings, you need:</p>
+          <p className="text-xs text-slate-500 mb-3">
+            {latest ? "Based on your latest reading:" : "General maintenance supplies:"}
+          </p>
           <div className="space-y-2">
-            {[
-              { name: "Muriatic Acid 1 Gal", amount: "6 fl oz needed", price: "$8.99", urgent: true },
-              { name: "Liquid Chlorine 1 Gal", amount: "Maintenance dose", price: "$6.99", urgent: false },
-            ].map((item) => (
+            {chemRecs.map((item) => (
               <div key={item.name} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
                 <div>
                   <p className="text-sm font-medium text-slate-900">{item.name}</p>
@@ -229,12 +272,7 @@ export default function HomeownerDashboard() {
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-bold text-slate-900">{item.price}</p>
-                  <a
-                    href="https://www.amazon.com/s?k=muriatic+acid+pool"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-pool-600 font-semibold"
-                  >
+                  <a href={item.link} target="_blank" rel="noopener noreferrer" className="text-xs text-pool-600 font-semibold">
                     Buy →
                   </a>
                 </div>

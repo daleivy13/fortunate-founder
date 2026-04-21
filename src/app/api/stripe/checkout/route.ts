@@ -4,10 +4,18 @@ import Stripe from "stripe";
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2024-04-10" });
 
 const PRICE_MAP: Record<string, Record<string, string>> = {
-  solo:   { USD: process.env.STRIPE_PRICE_SOLO_USD   || process.env.STRIPE_PRICE_SMALL  || "", GBP: process.env.STRIPE_PRICE_SOLO_GBP   || "", EUR: process.env.STRIPE_PRICE_SOLO_EUR   || "", AUD: process.env.STRIPE_PRICE_SOLO_AUD   || "" },
-  growth: { USD: process.env.STRIPE_PRICE_GROWTH_USD || process.env.STRIPE_PRICE_MEDIUM || "", GBP: process.env.STRIPE_PRICE_GROWTH_GBP || "", EUR: process.env.STRIPE_PRICE_GROWTH_EUR || "", AUD: process.env.STRIPE_PRICE_GROWTH_AUD || "" },
-  large:  { USD: process.env.STRIPE_PRICE_ENT_USD    || process.env.STRIPE_PRICE_LARGE  || "", GBP: process.env.STRIPE_PRICE_ENT_GBP    || "", EUR: process.env.STRIPE_PRICE_ENT_EUR    || "", AUD: process.env.STRIPE_PRICE_ENT_AUD    || "" },
+  solo:       { USD: process.env.STRIPE_PRICE_SOLO_USD   || process.env.STRIPE_PRICE_SMALL  || "", GBP: process.env.STRIPE_PRICE_SOLO_GBP   || "", EUR: process.env.STRIPE_PRICE_SOLO_EUR   || "", AUD: process.env.STRIPE_PRICE_SOLO_AUD   || "" },
+  growth:     { USD: process.env.STRIPE_PRICE_GROWTH_USD || process.env.STRIPE_PRICE_MEDIUM || "", GBP: process.env.STRIPE_PRICE_GROWTH_GBP || "", EUR: process.env.STRIPE_PRICE_GROWTH_EUR || "", AUD: process.env.STRIPE_PRICE_GROWTH_AUD || "" },
+  enterprise: { USD: process.env.STRIPE_PRICE_ENT_USD    || process.env.STRIPE_PRICE_LARGE  || "", GBP: process.env.STRIPE_PRICE_ENT_GBP    || "", EUR: process.env.STRIPE_PRICE_ENT_EUR    || "", AUD: process.env.STRIPE_PRICE_ENT_AUD    || "" },
+  // Add-ons
+  addon_portal:     { USD: process.env.STRIPE_PRICE_ADDON_PORTAL     || "" },
+  addon_whitelabel: { USD: process.env.STRIPE_PRICE_ADDON_WHITELABEL || "" },
+  addon_sms:        { USD: process.env.STRIPE_PRICE_ADDON_SMS        || "" },
+  addon_route:      { USD: process.env.STRIPE_PRICE_ADDON_ROUTE      || "" },
+  addon_tax:        { USD: process.env.STRIPE_PRICE_ADDON_TAX        || "" },
+  addon_skimmer:    { USD: process.env.STRIPE_PRICE_ADDON_SKIMMER    || "" },
   // Legacy plan IDs
+  large:  { USD: process.env.STRIPE_PRICE_ENT_USD || process.env.STRIPE_PRICE_LARGE  || "" },
   small:  { USD: process.env.STRIPE_PRICE_SMALL  || "" },
   medium: { USD: process.env.STRIPE_PRICE_MEDIUM || "" },
 };
@@ -15,6 +23,10 @@ const PRICE_MAP: Record<string, Record<string, string>> = {
 const REVOLUT_LOCALES = ["en-GB","fr-FR","de-DE","it-IT","es-ES","pt-PT","nl-NL","pl-PL","sv-SE","da-DK","fi-FI","nb-NO"];
 
 export async function POST(req: NextRequest) {
+  const { requireAuth } = await import("@/lib/auth");
+  const { auth, error } = await requireAuth(req);
+  if (error) return error;
+
   try {
     const { plan, email, userId, companyName, currency = "USD", locale = "en-US" } = await req.json();
 
@@ -42,7 +54,7 @@ export async function POST(req: NextRequest) {
     if (currency === "BRL") paymentMethodTypes.push("boleto");
 
     const session = await stripe.checkout.sessions.create({
-      customer,
+      customer: customer.id,
       mode: "subscription",
       payment_method_types: paymentMethodTypes as any,
       line_items: [{ price: priceId, quantity: 1 }],

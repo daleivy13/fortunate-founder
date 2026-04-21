@@ -3,14 +3,22 @@ import { db } from "@/backend/db";
 import { invoices } from "@/backend/db/schema";
 import { eq } from "drizzle-orm";
 import Stripe from "stripe";
+import { requireAuth } from "@/lib/auth";
+import { cacheDel, CacheKeys } from "@/lib/cache";
 
 const stripe = process.env.STRIPE_SECRET_KEY
   ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2024-04-10" })
   : null;
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  const { auth, error } = await requireAuth(req);
+  if (error) return error;
+
+  const id = parseInt(params.id);
+  if (isNaN(id)) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
+
   try {
-    const [inv] = await db.select().from(invoices).where(eq(invoices.id, parseInt(params.id)));
+    const [inv] = await db.select().from(invoices).where(eq(invoices.id, id));
     if (!inv) return NextResponse.json({ error: "Not found" }, { status: 404 });
     return NextResponse.json({ invoice: inv });
   } catch (err: any) {
@@ -19,6 +27,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+  const { auth, error } = await requireAuth(req);
+  if (error) return error;
+
   try {
     const body = await req.json();
     const id = parseInt(params.id);
@@ -53,6 +64,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         .where(eq(invoices.id, id))
         .returning();
 
+      await cacheDel(CacheKeys.invoices(inv.companyId));
       return NextResponse.json({ invoice: updated, paymentUrl: session.url });
     }
 
@@ -63,11 +75,13 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
         .set({ status: "paid", paidAt: new Date() })
         .where(eq(invoices.id, id))
         .returning();
+      if (updated) await cacheDel(CacheKeys.invoices(updated.companyId));
       return NextResponse.json({ invoice: updated });
     }
 
     // Generic update
     const [updated] = await db.update(invoices).set(body).where(eq(invoices.id, id)).returning();
+    if (updated) await cacheDel(CacheKeys.invoices(updated.companyId));
     return NextResponse.json({ invoice: updated });
   } catch (err: any) {
     console.error("[api/invoices/[id] PATCH]", err);
@@ -76,8 +90,14 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+  const { auth, error } = await requireAuth(req);
+  if (error) return error;
+
   try {
-    await db.delete(invoices).where(eq(invoices.id, parseInt(params.id)));
+    const id = parseInt(params.id);
+    if (isNaN(id)) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
+    const [inv] = await db.delete(invoices).where(eq(invoices.id, id)).returning();
+    if (inv) await cacheDel(CacheKeys.invoices(inv.companyId));
     return NextResponse.json({ success: true });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });

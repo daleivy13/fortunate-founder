@@ -1,15 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "crypto";
 import { db } from "@/backend/db";
-import { pools, serviceReports, invoices, companies } from "@/backend/db/schema";
+import { pools, serviceReports, invoices, companies, chemistryReadings } from "@/backend/db/schema";
 import { eq, desc } from "drizzle-orm";
+import Stripe from "stripe";
+
+const stripe = process.env.STRIPE_SECRET_KEY
+  ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2024-04-10" })
+  : null;
 
 const PORTAL_SECRET = process.env.NEXTAUTH_SECRET ?? "dev-portal-secret-change-in-production";
 
 // Token format: base64(JSON payload) + "." + base64(HMAC signature)
 // Payload: { poolId, companyId, email, exp }
 
-export function signPortalToken(payload: { poolId: number; companyId: number; email?: string }): string {
+function signPortalToken(payload: { poolId: number; companyId: number; email?: string }): string {
   const data = { ...payload, exp: Date.now() + 90 * 24 * 60 * 60 * 1000 }; // 90-day expiry
   const encoded = Buffer.from(JSON.stringify(data)).toString("base64url");
   const sig = createHmac("sha256", PORTAL_SECRET).update(encoded).digest("base64url");
@@ -34,10 +39,57 @@ function verifyPortalToken(token: string): { poolId: number; companyId: number; 
   }
 }
 
-// POST /api/portal — generate a portal token for a pool
+// POST /api/portal — generate a portal token (requires auth) OR create Stripe checkout (uses portal token)
 export async function POST(req: NextRequest) {
+  const body = await req.json();
+
+  // action=pay: public endpoint, authenticated via portal token
+  if (body.action === "pay") {
+    const payload = verifyPortalToken(body.token);
+    if (!payload) return NextResponse.json({ error: "Invalid or expired portal link" }, { status: 401 });
+
+    if (!stripe) return NextResponse.json({ error: "Payments not configured" }, { status: 503 });
+
+    const invoiceId = parseInt(body.invoiceId);
+    if (isNaN(invoiceId)) return NextResponse.json({ error: "Invalid invoiceId" }, { status: 400 });
+
+    try {
+      const [inv] = await db.select().from(invoices).where(eq(invoices.id, invoiceId));
+      if (!inv || inv.status === "paid") return NextResponse.json({ error: "Invoice not found or already paid" }, { status: 404 });
+
+      const lineItems = JSON.parse(inv.lineItems ?? "[]") as { desc: string; qty: number; rate: number }[];
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+
+      const session = await stripe.checkout.sessions.create({
+        mode: "payment",
+        payment_method_types: ["card"],
+        line_items: lineItems.map((item) => ({
+          price_data: {
+            currency: "usd",
+            product_data: { name: item.desc },
+            unit_amount: Math.round(item.rate * 100),
+          },
+          quantity: item.qty,
+        })),
+        success_url: `${appUrl}/customers/portal?token=${body.token}&paid=true`,
+        cancel_url:  `${appUrl}/customers/portal?token=${body.token}`,
+        customer_email: inv.clientEmail ?? undefined,
+        metadata: { invoiceId: String(invoiceId) },
+      });
+
+      return NextResponse.json({ paymentUrl: session.url });
+    } catch (err: any) {
+      return NextResponse.json({ error: err.message }, { status: 500 });
+    }
+  }
+
+  // Default: generate portal token (requires company auth)
+  const { requireAuth } = await import("@/lib/auth");
+  const { auth, error } = await requireAuth(req);
+  if (error) return error;
+
   try {
-    const { poolId, companyId, email } = await req.json();
+    const { poolId, companyId, email } = body;
     if (!poolId || !companyId) {
       return NextResponse.json({ error: "poolId and companyId required" }, { status: 400 });
     }
@@ -81,6 +133,14 @@ export async function GET(req: NextRequest) {
       .orderBy(desc(serviceReports.servicedAt))
       .limit(10);
 
+    // Fetch latest chemistry reading
+    const [latestChem] = await db
+      .select()
+      .from(chemistryReadings)
+      .where(eq(chemistryReadings.poolId, poolId))
+      .orderBy(desc(chemistryReadings.recordedAt))
+      .limit(1);
+
     // Fetch invoices for this pool
     const poolInvoices = await db
       .select()
@@ -92,6 +152,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       pool:     { id: pool.id, name: pool.name, address: pool.address, type: pool.type },
       company:  { name: company?.name ?? "Your Pool Service" },
+      latestChem: latestChem ? {
+        freeChlorine: latestChem.freeChlorine,
+        ph:           latestChem.ph,
+        recordedAt:   latestChem.recordedAt,
+      } : null,
       reports:  reports.map((r) => ({
         id:             r.id,
         servicedAt:     r.servicedAt,
@@ -105,11 +170,12 @@ export async function GET(req: NextRequest) {
         issuesFound:    r.issuesFound,
       })),
       invoices: poolInvoices.map((inv) => ({
-        id:        inv.id,
-        amount:    inv.amount,
-        status:    inv.status,
-        dueDate:   inv.dueDate,
-        lineItems: inv.lineItems,
+        id:                    inv.id,
+        amount:                inv.amount,
+        status:                inv.status,
+        dueDate:               inv.dueDate,
+        lineItems:             inv.lineItems,
+        stripePaymentIntentId: inv.stripePaymentIntentId,
       })),
     });
   } catch (err: any) {

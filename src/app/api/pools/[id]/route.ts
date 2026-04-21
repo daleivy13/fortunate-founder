@@ -2,11 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/backend/db";
 import { pools, chemistryReadings, serviceReports } from "@/backend/db/schema";
 import { eq, desc } from "drizzle-orm";
+import { requireAuth } from "@/lib/auth";
 
 export async function GET(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const { auth, error } = await requireAuth(req);
+  if (error) return error;
+
   try {
     const id = parseInt(params.id);
 
@@ -40,6 +44,9 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const { auth, error } = await requireAuth(req);
+  if (error) return error;
+
   try {
     const id = parseInt(params.id);
     const body = await req.json();
@@ -61,6 +68,9 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const { auth, error } = await requireAuth(req);
+  if (error) return error;
+
   try {
     const id = parseInt(params.id);
     await db.update(pools).set({ isActive: false }).where(eq(pools.id, id));

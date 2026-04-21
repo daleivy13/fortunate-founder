@@ -2,17 +2,21 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/backend/db";
 import { employees, users } from "@/backend/db/schema";
 import { eq, desc } from "drizzle-orm";
+import { requireAuth } from "@/lib/auth";
 
 export async function GET(req: NextRequest) {
+  const { auth, error } = await requireAuth(req);
+  if (error) return error;
+
   try {
     const { searchParams } = new URL(req.url);
-    const companyId = searchParams.get("companyId");
-    if (!companyId) return NextResponse.json({ error: "companyId required" }, { status: 400 });
+    const companyId = parseInt(searchParams.get("companyId") ?? "");
+    if (!companyId || isNaN(companyId)) return NextResponse.json({ error: "companyId required" }, { status: 400 });
 
     const rows = await db
       .select()
       .from(employees)
-      .where(eq(employees.companyId, parseInt(companyId)))
+      .where(eq(employees.companyId, companyId))
       .orderBy(desc(employees.createdAt));
 
     return NextResponse.json({ employees: rows });
@@ -22,6 +26,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const { auth, error } = await requireAuth(req);
+  if (error) return error;
+
   try {
     const body = await req.json();
     const { companyId, name, email, phone, role, hourlyRate } = body;

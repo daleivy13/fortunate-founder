@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/backend/db";
 import { sql } from "drizzle-orm";
+import { requireAuth } from "@/lib/auth";
 
 // Expo Push Notification service — free, no server required
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
@@ -35,6 +36,9 @@ async function sendPushNotifications(messages: PushMessage[]) {
 
 // ── Register device token ──────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
+  const { auth, error } = await requireAuth(req);
+  if (error) return error;
+
   const { action, userId, token, title, body, data, userIds, type } = await req.json();
 
   // Register a device push token

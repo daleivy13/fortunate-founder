@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/backend/db";
 import { companies } from "@/backend/db/schema";
 import { eq } from "drizzle-orm";
+import { requireAuth } from "@/lib/auth";
 
 // QuickBooks Online OAuth 2.0
 // Setup: https://developer.intuit.com → Create app → Get Client ID + Secret
@@ -87,6 +88,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const { auth, error } = await requireAuth(req);
+  if (error) return error;
+
   const { action, companyId, accessToken, realmId } = await req.json();
 
   // Sync an invoice to QuickBooks

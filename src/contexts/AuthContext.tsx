@@ -4,7 +4,8 @@ import {
   createContext, useContext, useEffect, useState, ReactNode, useCallback,
 } from "react";
 import {
-  User, onAuthStateChanged, signInWithPopup, signOut as firebaseSignOut,
+  User, onIdTokenChanged, signInWithRedirect, getRedirectResult,
+  signOut as firebaseSignOut,
   signInWithEmailAndPassword, createUserWithEmailAndPassword,
 } from "firebase/auth";
 import { useRouter } from "next/navigation";
@@ -26,15 +27,23 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+function setSessionCookie(token: string) {
+  document.cookie = `__session=${token}; path=/; max-age=3600; SameSite=Lax`;
+}
+
+function clearSessionCookie() {
+  document.cookie = `__session=; path=/; max-age=0; SameSite=Lax`;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user,    setUser]    = useState<User | null>(null);
   const [company, setCompany] = useState<Company | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
   const fetchCompany = useCallback(async (uid: string) => {
     try {
-      const res = await fetch(`/api/companies?ownerId=${uid}`);
+      const res  = await fetch(`/api/companies?ownerId=${uid}`);
       const data = await res.json();
       setCompany(data.company ?? null);
       return data.company ?? null;
@@ -48,36 +57,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (user) await fetchCompany(user.uid);
   }, [user, fetchCompany]);
 
+  const afterSignIn = useCallback(async (u: User) => {
+    const token = await u.getIdToken();
+    setSessionCookie(token);
+    const co = await fetchCompany(u.uid);
+    if (!co) router.push("/onboarding");
+    else     router.push("/dashboard");
+  }, [fetchCompany, router]);
+
+  // Handle Google/Apple redirect result on mount
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (u) => {
+    getRedirectResult(auth)
+      .then(async (result) => {
+        if (result?.user) await afterSignIn(result.user);
+      })
+      .catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Keep session cookie fresh on every token refresh (every ~1 hour)
+  useEffect(() => {
+    const unsub = onIdTokenChanged(auth, async (u) => {
       setUser(u);
       if (u) {
+        const token = await u.getIdToken();
+        setSessionCookie(token);
         const co = await fetchCompany(u.uid);
         if (!co && typeof window !== "undefined" && !window.location.pathname.startsWith("/onboarding")) {
           router.push("/onboarding");
         }
       } else {
         setCompany(null);
+        clearSessionCookie();
       }
       setLoading(false);
     });
     return unsub;
   }, [fetchCompany, router]);
 
-  const afterSignIn = async (u: User) => {
-    const co = await fetchCompany(u.uid);
-    if (!co) router.push("/onboarding");
-    else router.push("/dashboard");
-  };
-
   const signInWithGoogle = async () => {
-    const r = await signInWithPopup(auth, googleProvider);
-    await afterSignIn(r.user);
+    await signInWithRedirect(auth, googleProvider);
   };
 
   const signInWithApple = async () => {
-    const r = await signInWithPopup(auth, appleProvider);
-    await afterSignIn(r.user);
+    await signInWithRedirect(auth, appleProvider);
   };
 
   const signInWithEmail = async (email: string, password: string) => {
@@ -92,6 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     await firebaseSignOut(auth);
+    clearSessionCookie();
     setUser(null);
     setCompany(null);
     router.push("/auth/login");

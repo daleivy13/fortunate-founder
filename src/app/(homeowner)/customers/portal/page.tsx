@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { Waves, FileText, Receipt, CheckCircle2, Lock } from "lucide-react";
 
@@ -8,12 +8,29 @@ import { Waves, FileText, Receipt, CheckCircle2, Lock } from "lucide-react";
 // URL format: /customers/portal?token=<jwt_token>
 // Token encodes: companyId, poolId, clientEmail
 
-export default function CustomerPortalPage() {
+function CustomerPortalContent() {
   const params    = useSearchParams();
   const token     = params.get("token");
   const [data,    setData]    = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [tab,     setTab]     = useState<"reports"|"invoices">("reports");
+  const [paying,  setPaying]  = useState<number | null>(null);
+
+  const handlePay = async (invoiceId: number) => {
+    setPaying(invoiceId);
+    try {
+      const res = await fetch("/api/portal", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ action: "pay", token, invoiceId }),
+      });
+      const { paymentUrl, error } = await res.json();
+      if (paymentUrl) window.open(paymentUrl, "_blank");
+      else alert(error ?? "Payment unavailable");
+    } finally {
+      setPaying(null);
+    }
+  };
 
   useEffect(() => {
     if (!token) { setLoading(false); return; }
@@ -45,17 +62,11 @@ export default function CustomerPortalPage() {
     );
   }
 
-  // Mock data for demo
-  const pool     = data?.pool     ?? { name: "Your Pool", address: "1420 Maple Dr" };
-  const company  = data?.company  ?? { name: "Sunbelt Pool Services" };
-  const reports  = data?.reports  ?? [
-    { id:1, servicedAt: new Date().toISOString(), status:"sent", skimmed:true, brushed:true, vacuumed:true, filterCleaned:true, chemicalsAdded:true, equipmentChecked:true, techNotes:"Pool looks great!", freeChlorine:2.8, ph:7.4 },
-    { id:2, servicedAt: new Date(Date.now()-7*86400000).toISOString(), status:"sent", skimmed:true, brushed:true, vacuumed:false, filterCleaned:false, chemicalsAdded:true, equipmentChecked:true, techNotes:"Added chlorine.", freeChlorine:1.8, ph:7.6 },
-  ];
-  const invoices = data?.invoices ?? [
-    { id:1, amount:150, status:"paid",   dueDate:"Apr 1",  lineItems:"[{\"desc\":\"Monthly service\",\"qty\":1,\"rate\":150}]" },
-    { id:2, amount:150, status:"sent",   dueDate:"May 1",  lineItems:"[{\"desc\":\"Monthly service\",\"qty\":1,\"rate\":150}]" },
-  ];
+  const pool       = data?.pool     ?? { name: "Your Pool", address: "—" };
+  const company    = data?.company  ?? { name: "Your Pool Service" };
+  const reports    = data?.reports  ?? [];
+  const invoices   = data?.invoices ?? [];
+  const latestChem = data?.latestChem ?? null;
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -77,11 +88,11 @@ export default function CustomerPortalPage() {
           <h1 className="font-bold text-slate-900 text-lg">{pool.name}</h1>
           <p className="text-sm text-slate-400">{pool.address}</p>
 
-          {reports[0] && (
+          {latestChem && (
             <div className="grid grid-cols-2 gap-3 mt-4">
               {[
-                { label:"Free Chlorine", value:`${reports[0].freeChlorine} ppm`, ok: reports[0].freeChlorine >= 1 && reports[0].freeChlorine <= 4 },
-                { label:"pH",            value:String(reports[0].ph),           ok: reports[0].ph >= 7.2 && reports[0].ph <= 7.6 },
+                { label:"Free Chlorine", value:`${latestChem.freeChlorine} ppm`, ok: latestChem.freeChlorine >= 1 && latestChem.freeChlorine <= 4 },
+                { label:"pH",            value:String(latestChem.ph),            ok: latestChem.ph >= 7.2 && latestChem.ph <= 7.6 },
               ].map((s) => (
                 <div key={s.label} className={`rounded-xl p-3 text-center ${s.ok ? "bg-emerald-50" : "bg-amber-50"}`}>
                   <p className={`text-lg font-bold ${s.ok ? "text-emerald-700" : "text-amber-700"}`}>{s.value}</p>
@@ -123,7 +134,7 @@ export default function CustomerPortalPage() {
                   ))}
                 </div>
                 {r.techNotes && <p className="text-xs text-slate-500 italic">"{r.techNotes}"</p>}
-                <a href={`/api/pdf/${r.id}`} target="_blank" rel="noopener noreferrer" className="btn-outline w-full text-xs mt-3 py-2 text-center block">
+                <a href={`/api/reports/${r.id}/pdf?token=${token}`} target="_blank" rel="noopener noreferrer" className="btn-outline w-full text-xs mt-3 py-2 text-center block">
                   <FileText className="w-3 h-3 inline mr-1" />
                   Download PDF
                 </a>
@@ -158,9 +169,13 @@ export default function CustomerPortalPage() {
                     ))}
                   </div>
                   {!isPaid && (
-                    <button className="btn-primary w-full text-sm py-2.5">
+                    <button
+                      onClick={() => handlePay(inv.id)}
+                      disabled={paying === inv.id}
+                      className="btn-primary w-full text-sm py-2.5"
+                    >
                       <Receipt className="w-4 h-4" />
-                      Pay ${inv.amount} Securely
+                      {paying === inv.id ? "Redirecting..." : `Pay $${inv.amount} Securely`}
                     </button>
                   )}
                 </div>
@@ -170,5 +185,17 @@ export default function CustomerPortalPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function CustomerPortalPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="text-slate-400">Loading portal...</div>
+      </div>
+    }>
+      <CustomerPortalContent />
+    </Suspense>
   );
 }

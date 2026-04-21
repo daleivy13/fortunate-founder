@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAuth } from "@/lib/auth";
 
 async function sendSMS(to: string, body: string): Promise<boolean> {
   const accountSid = process.env.TWILIO_ACCOUNT_SID;
@@ -37,7 +38,7 @@ async function sendSMS(to: string, body: string): Promise<boolean> {
 }
 
 // ── SMS templates ──────────────────────────────────────────────────────────────
-export const SMS_TEMPLATES = {
+const SMS_TEMPLATES = {
   serviceComplete: (clientName: string, address: string, reportUrl: string) =>
     `Hi ${clientName}! Your pool at ${address} has been serviced. View your report: ${reportUrl}`,
 
@@ -59,6 +60,9 @@ export const SMS_TEMPLATES = {
 
 // ── API Route ──────────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
+  const { auth, error } = await requireAuth(req);
+  if (error) return error;
+
   try {
     const { type, to, data } = await req.json();
 

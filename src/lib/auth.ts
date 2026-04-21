@@ -28,17 +28,25 @@ export interface AuthResult {
 export async function verifyFirebaseToken(req: NextRequest): Promise<AuthResult | null> {
   const app = getFirebaseAdmin();
 
-  // If admin not configured (dev mode), extract uid from header for basic auth
+  // Dev mode without admin credentials — accept x-user-uid header unverified
   if (!app) {
     const uid = req.headers.get("x-user-uid");
     if (!uid) return null;
     return { uid, email: undefined, verified: false };
   }
 
+  // Extract token from Authorization header (mobile) or __session cookie (web)
+  let token: string | null = null;
   const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return null;
+  if (authHeader?.startsWith("Bearer ")) {
+    token = authHeader.slice(7);
+  } else {
+    const cookie = req.cookies.get("__session");
+    if (cookie?.value) token = cookie.value;
+  }
 
-  const token = authHeader.slice(7);
+  if (!token) return null;
+
   try {
     const decoded = await getAuth(app).verifyIdToken(token);
     return { uid: decoded.uid, email: decoded.email, verified: true };

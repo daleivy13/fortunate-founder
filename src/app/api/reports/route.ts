@@ -2,28 +2,37 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/backend/db";
 import { serviceReports, chemistryReadings, pools } from "@/backend/db/schema";
 import { eq, desc } from "drizzle-orm";
+import { requireAuth } from "@/lib/auth";
+import { validateBody, CreateReportSchema } from "@/lib/validation";
+import { cacheDel, CacheKeys } from "@/lib/cache";
 
 export async function GET(req: NextRequest) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const companyId = searchParams.get("companyId");
-    const poolId    = searchParams.get("poolId");
+  const { auth, error } = await requireAuth(req);
+  if (error) return error;
 
+  const { searchParams } = new URL(req.url);
+  const companyId = parseInt(searchParams.get("companyId") ?? "");
+  const poolId    = parseInt(searchParams.get("poolId")    ?? "");
+
+  try {
     let rows;
-    if (poolId) {
+    if (!isNaN(poolId) && poolId) {
       rows = await db
         .select()
         .from(serviceReports)
-        .where(eq(serviceReports.poolId, parseInt(poolId)))
-        .orderBy(desc(serviceReports.servicedAt));
-    } else {
+        .where(eq(serviceReports.poolId, poolId))
+        .orderBy(desc(serviceReports.servicedAt))
+        .limit(50);
+    } else if (!isNaN(companyId) && companyId) {
       rows = await db
         .select({ report: serviceReports, pool: pools })
         .from(serviceReports)
         .innerJoin(pools, eq(serviceReports.poolId, pools.id))
-        .where(eq(pools.companyId, parseInt(companyId!)))
+        .where(eq(pools.companyId, companyId))
         .orderBy(desc(serviceReports.servicedAt))
         .limit(50);
+    } else {
+      return NextResponse.json({ error: "companyId or poolId required" }, { status: 400 });
     }
 
     return NextResponse.json({ reports: rows });
@@ -34,36 +43,31 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const { auth, error } = await requireAuth(req);
+  if (error) return error;
+
+  const body = await req.json().catch(() => null);
+  if (!body) return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+
+  const { data, error: valErr } = validateBody(CreateReportSchema, body);
+  if (valErr) return valErr;
+
   try {
-    const body = await req.json();
-    const {
-      poolId, techId, routeId,
-      freeChlorine, ph, totalAlkalinity, calciumHardness, cyanuricAcid,
-      waterTemp, skimmed, brushed, vacuumed, filterCleaned,
-      chemicalsAdded, equipmentChecked, chemicalsUsed,
-      issuesFound, techNotes, photos,
-    } = body;
-
-    if (!poolId) {
-      return NextResponse.json({ error: "poolId is required" }, { status: 400 });
-    }
-
-    // Use a transaction so chemistry reading and report are created atomically
     const report = await db.transaction(async (tx) => {
       let chemReadingId: number | null = null;
 
-      if (freeChlorine || ph) {
+      if (data.freeChlorine != null || data.ph != null) {
         const [reading] = await tx
           .insert(chemistryReadings)
           .values({
-            poolId:          parseInt(poolId),
-            techId:          techId || null,
-            freeChlorine:    freeChlorine    ? parseFloat(freeChlorine)    : null,
-            ph:              ph              ? parseFloat(ph)              : null,
-            totalAlkalinity: totalAlkalinity ? parseFloat(totalAlkalinity) : null,
-            calciumHardness: calciumHardness ? parseFloat(calciumHardness) : null,
-            cyanuricAcid:    cyanuricAcid    ? parseFloat(cyanuricAcid)    : null,
-            waterTemp:       waterTemp       ? parseFloat(waterTemp)       : null,
+            poolId:          data.poolId,
+            techId:          data.techId  || null,
+            freeChlorine:    data.freeChlorine    ?? null,
+            ph:              data.ph               ?? null,
+            totalAlkalinity: data.totalAlkalinity  ?? null,
+            calciumHardness: data.calciumHardness  ?? null,
+            cyanuricAcid:    data.cyanuricAcid     ?? null,
+            waterTemp:       data.waterTemp        ?? null,
           })
           .returning();
         chemReadingId = reading.id;
@@ -72,27 +76,28 @@ export async function POST(req: NextRequest) {
       const [created] = await tx
         .insert(serviceReports)
         .values({
-          poolId:          parseInt(poolId),
-          techId:          techId  || null,
-          routeId:         routeId ? parseInt(routeId) : null,
+          poolId:           data.poolId,
+          techId:           data.techId   || null,
+          routeId:          data.routeId  ?? null,
           chemReadingId,
-          status:          "complete",
-          skimmed:         skimmed         ?? false,
-          brushed:         brushed         ?? false,
-          vacuumed:        vacuumed        ?? false,
-          filterCleaned:   filterCleaned   ?? false,
-          chemicalsAdded:  chemicalsAdded  ?? false,
-          equipmentChecked: equipmentChecked ?? false,
-          chemicalsUsed:   chemicalsUsed ? JSON.stringify(chemicalsUsed) : null,
-          issuesFound:     issuesFound  || null,
-          techNotes:       techNotes    || null,
-          photos:          photos       ? JSON.stringify(photos)       : null,
+          status:           "complete",
+          skimmed:          data.skimmed          ?? false,
+          brushed:          data.brushed          ?? false,
+          vacuumed:         data.vacuumed         ?? false,
+          filterCleaned:    data.filterCleaned    ?? false,
+          chemicalsAdded:   data.chemicalsAdded   ?? false,
+          equipmentChecked: data.equipmentChecked ?? false,
+          chemicalsUsed:    data.chemicalsUsed ? JSON.stringify(data.chemicalsUsed) : null,
+          issuesFound:      data.issuesFound  || null,
+          techNotes:        data.techNotes    || null,
+          photos:           data.photos?.length ? JSON.stringify(data.photos) : null,
         })
         .returning();
 
       return created;
     });
 
+    await cacheDel(CacheKeys.reports(body.companyId ?? 0));
     return NextResponse.json({ report }, { status: 201 });
   } catch (err: any) {
     console.error("[api/reports POST]", err);

@@ -2,9 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/backend/db";
 import { pools, routeStops, routes, chemistryReadings } from "@/backend/db/schema";
 import { eq, desc } from "drizzle-orm";
+import { requireAuth } from "@/lib/auth";
 
 // Fetches weather + tasks + last chemistry for each stop and builds a smart brief
 export async function GET(req: NextRequest) {
+  const { auth, error } = await requireAuth(req);
+  if (error) return error;
+
   try {
     const { searchParams } = new URL(req.url);
     const routeId   = searchParams.get("routeId");

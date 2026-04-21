@@ -2,13 +2,42 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/backend/db";
 import { serviceReports, pools, chemistryReadings, users } from "@/backend/db/schema";
 import { eq } from "drizzle-orm";
+import { requireAuth } from "@/lib/auth";
 
 // Generates an HTML-based PDF-ready report
 // In production, pipe this through Puppeteer or @react-pdf/renderer
+function verifyPortalToken(token: string): { poolId: number } | null {
+  try {
+    const { createHmac, timingSafeEqual } = require("crypto");
+    const secret = process.env.NEXTAUTH_SECRET ?? "dev-portal-secret-change-in-production";
+    const [encoded, sig] = token.split(".");
+    if (!encoded || !sig) return null;
+    const expected = createHmac("sha256", secret).update(encoded).digest("base64url");
+    const sigBuf = Buffer.from(sig, "base64url");
+    const expBuf = Buffer.from(expected, "base64url");
+    if (sigBuf.length !== expBuf.length || !timingSafeEqual(sigBuf, expBuf)) return null;
+    const payload = JSON.parse(Buffer.from(encoded, "base64url").toString());
+    if (payload.exp < Date.now()) return null;
+    return payload;
+  } catch { return null; }
+}
+
 export async function GET(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  // Accept either Firebase auth (pro dashboard) or portal token (customer-facing)
+  const portalToken = req.nextUrl.searchParams.get("token");
+  if (portalToken) {
+    const payload = verifyPortalToken(portalToken);
+    if (!payload) {
+      return NextResponse.json({ error: "Invalid or expired portal link" }, { status: 401 });
+    }
+  } else {
+    const { auth, error } = await requireAuth(req);
+    if (error) return error;
+  }
+
   try {
     const reportId = parseInt(params.id);
 

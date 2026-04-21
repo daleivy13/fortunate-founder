@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Waves, ArrowLeft, Zap, Lock, AlertTriangle, CheckCircle2 } from "lucide-react";
 
@@ -54,12 +54,30 @@ const URGENCY_STYLES = {
   normal:   "bg-emerald-50 border-emerald-200 text-emerald-800",
 };
 
+function getGuestId(): string {
+  if (typeof window === "undefined") return "";
+  let id = localStorage.getItem("guestId");
+  if (!id) { id = Math.random().toString(36).slice(2); localStorage.setItem("guestId", id); }
+  return id;
+}
+
 export default function HomeownerCheckPage() {
   const router = useRouter();
   const [step, setStep] = useState<"input" | "results">("input");
-  const [isPro] = useState(false);
-  const [checksLeft] = useState(1);
+  const [isPro, setIsPro] = useState(false);
+  const [checksLeft, setChecksLeft] = useState(1);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const userId = getGuestId();
+    fetch(`/api/homeowner/usage?userId=${userId}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (typeof d.checksRemaining === "number") setChecksLeft(d.checksRemaining);
+        if (d.isPro) setIsPro(true);
+      })
+      .catch(() => {});
+  }, []);
   const [aiAnalysis, setAiAnalysis] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
 
@@ -73,7 +91,33 @@ export default function HomeownerCheckPage() {
   const handleCheck = async () => {
     if (!vals.freeChlorine || !vals.ph) return;
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 800));
+    const userId = getGuestId();
+    try {
+      const res = await fetch("/api/homeowner/usage", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ userId, isPro }),
+      });
+      const d = await res.json();
+      if (!d.allowed) {
+        setLoading(false);
+        router.push("/homeowner?upgrade=true");
+        return;
+      }
+      setChecksLeft(d.checksRemaining ?? 0);
+    } catch {}
+    // Save reading to localStorage history
+    try {
+      const existing = JSON.parse(localStorage.getItem("chemHistory") ?? "[]");
+      const newReading = {
+        date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+        cl:   parseFloat(vals.freeChlorine),
+        ph:   parseFloat(vals.ph),
+        ...(vals.totalAlkalinity ? { ta: parseFloat(vals.totalAlkalinity) } : {}),
+      };
+      localStorage.setItem("chemHistory", JSON.stringify([newReading, ...existing].slice(0, 20)));
+    } catch {}
+
     setLoading(false);
     setStep("results");
   };

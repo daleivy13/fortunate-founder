@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/backend/db";
 import { sql } from "drizzle-orm";
+import { requireAuth } from "@/lib/auth";
 
 // ── Task templates — every pool gets these by default ──────────────────────────
-export const DEFAULT_TASK_TEMPLATES = [
+const DEFAULT_TASK_TEMPLATES = [
   { key: "filter_clean",      name: "Clean/backwash filter",     intervalDays: 30,  category: "equipment", icon: "🔧" },
   { key: "basket_clean",      name: "Clean pump & skimmer baskets", intervalDays: 7, category: "maintenance", icon: "🧺" },
   { key: "algaecide",         name: "Apply monthly algaecide",   intervalDays: 30,  category: "chemistry",  icon: "🧪" },
@@ -22,6 +23,9 @@ export const DEFAULT_TASK_TEMPLATES = [
 ];
 
 export async function GET(req: NextRequest) {
+  const { auth, error } = await requireAuth(req);
+  if (error) return error;
+
   try {
     const { searchParams } = new URL(req.url);
     const poolId = searchParams.get("poolId");
@@ -76,6 +80,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const { auth, error } = await requireAuth(req);
+  if (error) return error;
+
   try {
     const body = await req.json();
     const { action, taskId, poolId, notes } = body;

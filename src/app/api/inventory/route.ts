@@ -18,6 +18,10 @@ const DEFAULT_CHEMICALS = [
 ];
 
 export async function GET(req: NextRequest) {
+  const { requireAuth } = await import("@/lib/auth");
+  const { auth, error } = await requireAuth(req);
+  if (error) return error;
+
   const { searchParams } = new URL(req.url);
   const companyId = searchParams.get("companyId");
   if (!companyId) return NextResponse.json({ error: "companyId required" }, { status: 400 });
@@ -46,6 +50,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const { requireAuth } = await import("@/lib/auth");
+  const { auth, error } = await requireAuth(req);
+  if (error) return error;
+
   const body = await req.json();
   const { action, companyId, itemId, qty, name, unit, minQty, costPerUnit } = body;
 

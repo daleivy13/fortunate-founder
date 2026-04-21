@@ -10,18 +10,7 @@ import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { useState } from "react";
 
-// Fallback mock data if DB not connected yet
-const MOCK = {
-  pool: { id: 1, name: "Johnson Residence", clientName: "Mike Johnson", clientEmail: "mjohnson@email.com", clientPhone: "(480) 555-0101", address: "1420 Maple Dr, Scottsdale, AZ", type: "residential", volumeGallons: 15000, monthlyRate: 150, serviceDay: "Mon/Thu", notes: "Gate code: 4421. Dog friendly, no issues.", isActive: true },
-  readings: [
-    { id: 1, freeChlorine: 0.8, ph: 8.4, totalAlkalinity: 120, waterTemp: 82, recordedAt: new Date().toISOString() },
-    { id: 2, freeChlorine: 2.8, ph: 7.4, totalAlkalinity: 105, waterTemp: 80, recordedAt: new Date(Date.now() - 7 * 86400000).toISOString() },
-  ],
-  reports: [
-    { id: 1, status: "sent", servicedAt: new Date().toISOString(), skimmed: true, brushed: true, vacuumed: true, filterCleaned: true, chemicalsAdded: true, equipmentChecked: true, techNotes: "Added chemicals per AI recommendation.", issuesFound: "pH high" },
-    { id: 2, status: "sent", servicedAt: new Date(Date.now() - 7 * 86400000).toISOString(), skimmed: true, brushed: true, vacuumed: true, filterCleaned: false, chemicalsAdded: true, equipmentChecked: true, techNotes: "All good.", issuesFound: null },
-  ],
-};
+const EMPTY = { pool: null, readings: [], reports: [] };
 
 const CHEM_STATUS = (val: number | null, min: number, max: number) => {
   if (val === null) return "text-slate-400";
@@ -50,13 +39,23 @@ export default function PoolDetailPage() {
     } catch {}
   };
 
-  const { pool, readings, reports } = data ?? MOCK;
+  const { pool, readings, reports } = data ?? EMPTY;
   const latest = readings?.[0];
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-64">
         <div className="w-8 h-8 border-2 border-pool-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!pool) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-64 gap-3">
+        <Waves className="w-10 h-10 text-slate-300" />
+        <p className="text-slate-500 font-medium">Pool not found</p>
+        <button onClick={() => router.back()} className="btn-secondary text-sm">← Go back</button>
       </div>
     );
   }
@@ -89,7 +88,7 @@ export default function PoolDetailPage() {
               <FlaskConical className="w-4 h-4" /> Chemistry
             </button>
           </Link>
-          <Link href={`/reports/new?pool=${pool.id}`}>
+          <Link href={`/reports?pool=${pool.id}`}>
             <button className="btn-primary text-sm">
               <FileText className="w-4 h-4" /> New Report
             </button>

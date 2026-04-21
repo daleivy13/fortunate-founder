@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/backend/db";
 import { users, companies } from "@/backend/db/schema";
 import { eq } from "drizzle-orm";
+import { requireAuth } from "@/lib/auth";
 
 export async function PATCH(req: NextRequest) {
+  const { auth, error } = await requireAuth(req);
+  if (error) return error;
+
   try {
     const { uid, displayName, phone, companyName } = await req.json();
     if (!uid) return NextResponse.json({ error: "uid required" }, { status: 400 });

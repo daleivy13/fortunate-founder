@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Navigation, CheckCircle2, Clock, Car, Thermometer, Droplets, Wind, Sun, ChevronDown, ChevronUp, ClipboardList, Zap, Loader2 } from "lucide-react";
 import { useGPS } from "@/hooks/useGPS";
 import { usePools } from "@/hooks/useData";
+import { useAuth } from "@/contexts/AuthContext";
 import Link from "next/link";
 
 const P_STYLES = {
@@ -39,7 +40,8 @@ function buildStopFromPool(pool: any, idx: number) {
 }
 
 export default function SmartRoutesPage() {
-  const { isTracking, totalMiles, startTracking, stopTracking } = useGPS();
+  const { user } = useAuth();
+  const { isTracking, totalMiles, startTracking, stopTracking } = useGPS(user?.uid ?? null);
   const { data: poolsData, isLoading } = usePools();
 
   const [expanded,     setExpanded]    = useState<number | null>(null);
@@ -51,7 +53,7 @@ export default function SmartRoutesPage() {
   useEffect(() => {
     if (poolsData?.pools) {
       const built = poolsData.pools.map(buildStopFromPool);
-      if (built.length > 0) built[0].status = "current";
+      if (built.length > 0) (built[0] as any).status = "in_progress";
       setStops(built);
       if (built.length > 0) setExpanded(built[0].id);
     }

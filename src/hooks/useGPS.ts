@@ -27,7 +27,7 @@ function haversineMiles(a: Position, b: Position): number {
   return 2 * EARTH_RADIUS_MILES * Math.asin(Math.sqrt(h));
 }
 
-export function useGPS(): GPSState {
+export function useGPS(userId?: string | null): GPSState {
   const [isTracking, setIsTracking] = useState(false);
   const [currentPos, setCurrentPos] = useState<Position | null>(null);
   const [positions, setPositions] = useState<Position[]>([]);
@@ -94,6 +94,7 @@ export function useGPS(): GPSState {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          userId: userId ?? undefined,
           miles: finalMiles,
           date: new Date().toISOString().split("T")[0],
           purpose: "Pool service route",

@@ -4,7 +4,7 @@ import { z } from "zod";
 export const CreatePoolSchema = z.object({
   companyId:     z.coerce.number().int().positive(),
   name:          z.string().min(1, "Pool name required").max(100),
-  clientName:    z.string().min(1, "Client name required").max(100),
+  clientName:    z.string().max(100).optional().or(z.literal("")),
   clientEmail:   z.string().email("Invalid email").optional().or(z.literal("")),
   clientPhone:   z.string().max(30).optional(),
   address:       z.string().min(3, "Address required").max(200),

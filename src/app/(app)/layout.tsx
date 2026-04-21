@@ -7,7 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   LayoutDashboard, Waves, FlaskConical, MapPin,
   FileText, Users, Receipt, BarChart3, LogOut,
-  Settings, Bell, ChevronRight, Menu, X,
+  Settings, Bell, ChevronRight, Menu, X, Package, Upload, Gift,
 } from "lucide-react";
 
 const NAV = [
@@ -16,9 +16,12 @@ const NAV = [
   { href: "/chemistry",  label: "Chemistry AI", icon: FlaskConical,    group: "main" },
   { href: "/routes",     label: "Routes & GPS", icon: MapPin,          group: "main" },
   { href: "/reports",    label: "Reports",      icon: FileText,        group: "main" },
+  { href: "/inventory",  label: "Inventory",    icon: Package,         group: "main" },
   { href: "/invoices",   label: "Invoices",     icon: Receipt,         group: "business" },
   { href: "/employees",  label: "Employees",    icon: Users,           group: "business" },
   { href: "/analytics",  label: "Analytics",    icon: BarChart3,       group: "business" },
+  { href: "/referral",   label: "Refer & Earn", icon: Gift,            group: "business" },
+  { href: "/import",     label: "Import",       icon: Upload,          group: "business" },
 ];
 
 function Sidebar({ onClose }: { onClose?: () => void }) {

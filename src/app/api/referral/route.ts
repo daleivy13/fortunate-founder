@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/backend/db";
 import { sql } from "drizzle-orm";
+import { requireAuth } from "@/lib/auth";
 
 const REFERRAL_CREDIT_USD = 50; // $50 credit per successful referral
 
 export async function GET(req: NextRequest) {
+  const { auth, error } = await requireAuth(req);
+  if (error) return error;
+
   const { searchParams } = new URL(req.url);
   const userId = searchParams.get("userId");
   if (!userId) return NextResponse.json({ error: "userId required" }, { status: 400 });
@@ -46,6 +50,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const { auth, error } = await requireAuth(req);
+  if (error) return error;
+
   const { action, referrerId, refereeEmail, refereeId } = await req.json();
 
   if (action === "track") {

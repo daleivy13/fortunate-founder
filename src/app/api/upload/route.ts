@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAuth } from "@/lib/auth";
 
 // Cloudflare R2 is S3-compatible with zero egress fees
 // Get from: https://dash.cloudflare.com → R2 → Create bucket
 // Add: CF_ACCOUNT_ID, CF_R2_ACCESS_KEY, CF_R2_SECRET_KEY, CF_R2_BUCKET_NAME to .env.local
 
 export async function POST(req: NextRequest) {
+  const { auth, error } = await requireAuth(req);
+  if (error) return error;
+
   try {
     const formData = await req.formData();
     const file     = formData.get("file") as File | null;
@@ -73,4 +77,4 @@ export async function POST(req: NextRequest) {
   }
 }
 
-export const config = { api: { bodyParser: false } };
+export const runtime = "nodejs";

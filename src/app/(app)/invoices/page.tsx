@@ -1,15 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Receipt, Plus, Send, DollarSign, Clock, CheckCircle2, AlertCircle } from "lucide-react";
-
-const INVOICES = [
-  { id: "INV-001", client: "Johnson Residence", email: "mjohnson@email.com", amount: 150, status: "paid", due: "Apr 1", paid: "Mar 28", items: [{ desc: "Monthly pool service — April", qty: 1, rate: 150 }] },
-  { id: "INV-002", client: "Park Estates HOA", email: "hoa@parkestates.com", amount: 400, status: "sent", due: "Apr 15", paid: null, items: [{ desc: "Monthly pool service — April", qty: 1, rate: 350 }, { desc: "Chemical treatment (emergency)", qty: 1, rate: 50 }] },
-  { id: "INV-003", client: "Rivera Family", email: "crivera@email.com", amount: 120, status: "overdue", due: "Apr 1", paid: null, items: [{ desc: "Monthly pool service — April", qty: 1, rate: 120 }] },
-  { id: "INV-004", client: "Desert Oasis Resort", email: "facilities@desertoasis.com", amount: 800, status: "draft", due: "May 1", paid: null, items: [{ desc: "Monthly commercial service — May", qty: 1, rate: 700 }, { desc: "Filter inspection & service", qty: 1, rate: 100 }] },
-  { id: "INV-005", client: "Thompson Backyard", email: "bthompson@email.com", amount: 100, status: "paid", due: "Apr 1", paid: "Apr 2", items: [{ desc: "Monthly pool service — April", qty: 1, rate: 100 }] },
-];
+import { Receipt, Plus, Send, DollarSign, Clock, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import { useInvoices, useCreateInvoice, useUpdateInvoice } from "@/hooks/useData";
+import { useAuth } from "@/contexts/AuthContext";
+import { usePools } from "@/hooks/useData";
 
 const STATUS = {
   paid:    { label: "Paid",    cls: "badge-green",  icon: CheckCircle2 },
@@ -21,18 +16,35 @@ const STATUS = {
 export default function InvoicesPage() {
   const [showNew, setShowNew] = useState(false);
   const [filter, setFilter] = useState<"all" | "unpaid" | "paid">("all");
+  const { data, isLoading } = useInvoices();
+  const updateInvoice = useUpdateInvoice();
 
-  const totalPaid = INVOICES.filter((i) => i.status === "paid").reduce((s, i) => s + i.amount, 0);
-  const totalOwed = INVOICES.filter((i) => i.status !== "paid" && i.status !== "draft").reduce((s, i) => s + i.amount, 0);
-  const overdue = INVOICES.filter((i) => i.status === "overdue").length;
+  const invoices = data?.invoices ?? [];
 
-  const filtered = INVOICES.filter((i) =>
-    filter === "all" ? true :
-    filter === "paid" ? i.status === "paid" :
+  const totalPaid = invoices.filter((i: any) => i.status === "paid").reduce((s: number, i: any) => s + parseFloat(i.amount), 0);
+  const totalOwed = invoices.filter((i: any) => i.status !== "paid" && i.status !== "draft").reduce((s: number, i: any) => s + parseFloat(i.amount), 0);
+  const overdue   = invoices.filter((i: any) => i.status === "overdue").length;
+
+  const filtered = invoices.filter((i: any) =>
+    filter === "all"    ? true :
+    filter === "paid"   ? i.status === "paid" :
     i.status === "sent" || i.status === "overdue" || i.status === "draft"
   );
 
-  if (showNew) return <NewInvoiceForm onBack={() => setShowNew(false)} />;
+  const sendInvoice = async (inv: any) => {
+    const res = await fetch(`/api/invoices/${inv.id}`, {
+      method:  "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ action: "send" }),
+    });
+    const data = await res.json();
+    if (data.paymentUrl) window.open(data.paymentUrl, "_blank");
+    updateInvoice.mutate({ id: inv.id, status: "sent" });
+  };
+
+  const markPaid = (id: number) => updateInvoice.mutate({ id, action: "mark_paid" });
+
+  if (showNew) return <NewInvoiceForm onBack={() => setShowNew(false)} onDone={() => setShowNew(false)} />;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -90,70 +102,145 @@ export default function InvoicesPage() {
       </div>
 
       {/* Invoice list */}
-      <div className="space-y-3">
-        {filtered.map((inv) => {
-          const s = STATUS[inv.status as keyof typeof STATUS];
-          return (
-            <div key={inv.id} className="card p-5">
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="flex items-center gap-3 mb-1">
-                    <p className="font-bold text-slate-900">{inv.client}</p>
-                    <span className={s.cls}>{s.label}</span>
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="card p-12 text-center">
+          <Receipt className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+          <p className="text-slate-400 font-medium">No invoices yet</p>
+          <p className="text-slate-400 text-sm mt-1">Create your first invoice to get started</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filtered.map((inv: any) => {
+            const s = STATUS[inv.status as keyof typeof STATUS] ?? STATUS.draft;
+            let lineItems: any[] = [];
+            try { lineItems = JSON.parse(inv.lineItems ?? "[]"); } catch {}
+            return (
+              <div key={inv.id} className="card p-5">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="flex items-center gap-3 mb-1">
+                      <p className="font-bold text-slate-900">{inv.clientName}</p>
+                      <span className={s.cls}>{s.label}</span>
+                    </div>
+                    <p className="text-xs text-slate-400">#{inv.id} · {inv.clientEmail ?? "No email"}</p>
                   </div>
-                  <p className="text-xs text-slate-400">{inv.id} · {inv.email}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-xl font-bold text-slate-900">${inv.amount.toLocaleString()}</p>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    {inv.status === "paid" ? `Paid ${inv.paid}` : `Due ${inv.due}`}
-                  </p>
-                </div>
-              </div>
-
-              {/* Line items */}
-              <div className="mt-3 pt-3 border-t border-slate-100 space-y-1">
-                {inv.items.map((item, i) => (
-                  <div key={i} className="flex justify-between text-sm">
-                    <span className="text-slate-600">{item.desc}</span>
-                    <span className="font-medium text-slate-900">${item.rate}</span>
+                  <div className="text-right">
+                    <p className="text-xl font-bold text-slate-900">${parseFloat(inv.amount).toLocaleString()}</p>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      {inv.status === "paid"
+                        ? `Paid ${new Date(inv.paidAt ?? inv.updatedAt).toLocaleDateString()}`
+                        : inv.dueDate ? `Due ${new Date(inv.dueDate).toLocaleDateString()}` : "No due date"}
+                    </p>
                   </div>
-                ))}
-              </div>
+                </div>
 
-              {/* Actions */}
-              {inv.status !== "paid" && (
-                <div className="flex gap-2 mt-3 pt-3 border-t border-slate-100">
-                  {inv.status === "draft" && (
-                    <button className="btn-primary text-sm flex-1">
-                      <Send className="w-3.5 h-3.5" /> Send Invoice
-                    </button>
-                  )}
-                  {(inv.status === "sent" || inv.status === "overdue") && (
-                    <>
-                      <button className="btn-secondary text-sm">Resend</button>
-                      <button className="btn-primary text-sm flex-1">
-                        <CheckCircle2 className="w-3.5 h-3.5" /> Mark as Paid
+                {lineItems.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-slate-100 space-y-1">
+                    {lineItems.map((item: any, i: number) => (
+                      <div key={i} className="flex justify-between text-sm">
+                        <span className="text-slate-600">{item.desc ?? item.description}</span>
+                        <span className="font-medium text-slate-900">${(item.qty ?? 1) * (item.rate ?? item.amount ?? 0)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {inv.status !== "paid" && (
+                  <div className="flex gap-2 mt-3 pt-3 border-t border-slate-100">
+                    {inv.status === "draft" && (
+                      <button
+                        onClick={() => sendInvoice(inv)}
+                        disabled={updateInvoice.isPending}
+                        className="btn-primary text-sm flex-1"
+                      >
+                        <Send className="w-3.5 h-3.5" /> Send Invoice
                       </button>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+                    )}
+                    {(inv.status === "sent" || inv.status === "overdue") && (
+                      <>
+                        <button
+                          onClick={() => sendInvoice(inv)}
+                          disabled={updateInvoice.isPending}
+                          className="btn-secondary text-sm"
+                        >
+                          Resend
+                        </button>
+                        <button
+                          onClick={() => markPaid(inv.id)}
+                          disabled={updateInvoice.isPending}
+                          className="btn-primary text-sm flex-1"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Mark as Paid
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
 
-function NewInvoiceForm({ onBack }: { onBack: () => void }) {
-  const [items, setItems] = useState([{ desc: "Monthly pool service", qty: 1, rate: "" }]);
+function NewInvoiceForm({ onBack, onDone }: { onBack: () => void; onDone: () => void }) {
+  const { company } = useAuth();
+  const { data: poolsData } = usePools();
+  const createInvoice = useCreateInvoice();
+  const [items, setItems] = useState([{ desc: "Monthly pool service", qty: 1, rate: "" as string }]);
+  const [clientName, setClientName]   = useState("");
+  const [clientEmail, setClientEmail] = useState("");
+  const [dueDate, setDueDate]         = useState("");
+  const [notes, setNotes]             = useState("");
+  const [saving, setSaving]           = useState(false);
+  const [error, setError]             = useState("");
 
+  const pools = poolsData?.pools ?? [];
   const total = items.reduce((s, i) => s + (parseFloat(i.rate) || 0) * i.qty, 0);
 
-  const addItem = () => setItems((it) => [...it, { desc: "", qty: 1, rate: "" }]);
+  const addItem    = () => setItems((it) => [...it, { desc: "", qty: 1, rate: "" }]);
   const removeItem = (idx: number) => setItems((it) => it.filter((_, i) => i !== idx));
+
+  const save = async (send: boolean) => {
+    if (!clientName.trim()) { setError("Client name is required"); return; }
+    if (items.every((i) => !parseFloat(i.rate))) { setError("Add at least one line item with a price"); return; }
+    setSaving(true);
+    setError("");
+    try {
+      const lineItems = items
+        .filter((i) => i.desc || parseFloat(i.rate))
+        .map((i) => ({ desc: i.desc, qty: i.qty, rate: parseFloat(i.rate) || 0 }));
+
+      const inv = await createInvoice.mutateAsync({
+        companyId:   company!.id,
+        clientName,
+        clientEmail: clientEmail || null,
+        dueDate:     dueDate || null,
+        notes:       notes || null,
+        lineItems:   JSON.stringify(lineItems),
+      });
+
+      if (send && inv.invoice?.id && clientEmail) {
+        await fetch(`/api/invoices/${inv.invoice.id}`, {
+          method:  "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ status: "sent", sendEmail: true }),
+        });
+      }
+
+      onDone();
+    } catch (err: any) {
+      setError(err.message ?? "Failed to create invoice");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="space-y-6 animate-fade-in max-w-2xl">
@@ -162,23 +249,48 @@ function NewInvoiceForm({ onBack }: { onBack: () => void }) {
         <h1 className="text-2xl font-bold text-slate-900">New Invoice</h1>
       </div>
 
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-2.5 text-sm">{error}</div>
+      )}
+
       <div className="card p-6 space-y-5">
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="label">Client Name</label>
-            <select className="input">
-              <option>Select pool / client...</option>
-              <option>Johnson Residence</option>
-              <option>Park Estates HOA</option>
-              <option>Rivera Family</option>
-              <option>Desert Oasis Resort</option>
-              <option>Thompson Backyard</option>
-            </select>
+            {pools.length > 0 ? (
+              <select
+                className="input"
+                value={clientName}
+                onChange={(e) => {
+                  const pool = pools.find((p: any) => p.clientName === e.target.value);
+                  setClientName(e.target.value);
+                  if (pool?.clientEmail) setClientEmail(pool.clientEmail);
+                }}
+              >
+                <option value="">Select client...</option>
+                {pools.map((p: any) => (
+                  <option key={p.id} value={p.clientName}>{p.clientName} — {p.name}</option>
+                ))}
+              </select>
+            ) : (
+              <input className="input" placeholder="Client name" value={clientName} onChange={(e) => setClientName(e.target.value)} />
+            )}
           </div>
           <div>
             <label className="label">Due Date</label>
-            <input type="date" className="input" />
+            <input type="date" className="input" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
           </div>
+        </div>
+
+        <div>
+          <label className="label">Client Email</label>
+          <input
+            type="email"
+            className="input"
+            placeholder="client@example.com"
+            value={clientEmail}
+            onChange={(e) => setClientEmail(e.target.value)}
+          />
         </div>
 
         {/* Line items */}
@@ -230,13 +342,21 @@ function NewInvoiceForm({ onBack }: { onBack: () => void }) {
 
         <div>
           <label className="label">Notes (optional)</label>
-          <textarea className="input resize-none" rows={3} placeholder="Payment terms, thank you note, etc." />
+          <textarea
+            className="input resize-none"
+            rows={3}
+            placeholder="Payment terms, thank you note, etc."
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+          />
         </div>
 
         <div className="flex gap-3">
-          <button className="btn-outline flex-1">Save Draft</button>
-          <button className="btn-primary flex-1">
-            <Send className="w-4 h-4" /> Send Invoice
+          <button onClick={() => save(false)} disabled={saving} className="btn-outline flex-1">
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Save Draft"}
+          </button>
+          <button onClick={() => save(true)} disabled={saving} className="btn-primary flex-1">
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Send className="w-4 h-4" /> Send Invoice</>}
           </button>
         </div>
       </div>
