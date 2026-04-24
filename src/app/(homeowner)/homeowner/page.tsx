@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Waves, Zap, AlertTriangle, TrendingUp, Lock, MapPin, ShoppingCart, ChevronRight } from "lucide-react";
 import Link from "next/link";
 
@@ -37,6 +38,7 @@ function loadHistory(): ChemReading[] {
 }
 
 export default function HomeownerDashboard() {
+  const router = useRouter();
   const [isPro,       setIsPro]       = useState(false);
   const [checksLeft,  setChecksLeft]  = useState(1);
   const [history,     setHistory]     = useState<ChemReading[]>([]);
@@ -91,7 +93,7 @@ export default function HomeownerDashboard() {
           </div>
           {!isPro && (
             <button
-              onClick={() => setIsPro(true)}
+              onClick={() => router.push("/homeowner/upgrade")}
               className="text-xs bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-full font-semibold transition-colors"
             >
               Upgrade $9/mo
@@ -215,7 +217,7 @@ export default function HomeownerDashboard() {
               </div>
               <div className="absolute inset-0 flex items-center justify-center bg-white/60 rounded-xl">
                 <button
-                  onClick={() => setIsPro(true)}
+                  onClick={() => router.push("/homeowner/upgrade")}
                   className="flex items-center gap-2 bg-pool-500 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-pool-600 transition-colors"
                 >
                   <Lock className="w-3.5 h-3.5" />

@@ -68,17 +68,32 @@ export default function OnboardingPage() {
 
   const next = async () => {
     if (isLast) { router.push("/dashboard"); return; }
-    if (cur.id === "company") {
-      setSaving(true);
-      try {
-        await fetch("/api/companies", {
+    setSaving(true);
+    try {
+      if (cur.id === "company") {
+        const res = await fetch("/api/companies", {
           method:"POST", headers:{"Content-Type":"application/json"},
           body: JSON.stringify({ companyName:vals.companyName, phone:vals.phone, ownerId:user?.uid, email:user?.email }),
         });
-      } catch {}
-      setSaving(false);
-    }
-    if (cur.id === "chemistry") chemTip();
+        const d = await res.json();
+        if (d.company?.id) set("companyId", String(d.company.id));
+      }
+      if (cur.id === "pool" && vals.poolName && vals.poolAddr && vals.companyId) {
+        await fetch("/api/pools", {
+          method:"POST", headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({
+            companyId:     parseInt(vals.companyId),
+            name:          vals.poolName,
+            clientName:    vals.poolName,
+            address:       vals.poolAddr,
+            volumeGallons: vals.poolVol ? parseInt(vals.poolVol) : 15000,
+            type:          "residential",
+          }),
+        });
+      }
+      if (cur.id === "chemistry") chemTip();
+    } catch {}
+    setSaving(false);
     setStep(s => s+1);
   };
 

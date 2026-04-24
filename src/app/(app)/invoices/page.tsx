@@ -26,9 +26,9 @@ export default function InvoicesPage() {
   const overdue   = invoices.filter((i: any) => i.status === "overdue").length;
 
   const filtered = invoices.filter((i: any) =>
-    filter === "all"    ? true :
-    filter === "paid"   ? i.status === "paid" :
-    i.status === "sent" || i.status === "overdue" || i.status === "draft"
+    filter === "all"  ? true :
+    filter === "paid" ? i.status === "paid" :
+    i.status === "sent" || i.status === "overdue"
   );
 
   const sendInvoice = async (inv: any) => {

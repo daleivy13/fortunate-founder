@@ -4,6 +4,45 @@ import { employees, users } from "@/backend/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth";
 
+export async function PATCH(req: NextRequest) {
+  const { auth, error } = await requireAuth(req);
+  if (error) return error;
+
+  try {
+    const { id, name, role, email, phone, hourlyRate, isActive } = await req.json();
+    if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+
+    const allowed: Record<string, any> = {};
+    if (name        !== undefined) allowed.name        = name;
+    if (role        !== undefined) allowed.role        = role;
+    if (email       !== undefined) allowed.email       = email       || null;
+    if (phone       !== undefined) allowed.phone       = phone       || null;
+    if (hourlyRate  !== undefined) allowed.hourlyRate  = hourlyRate  ? parseFloat(hourlyRate) : null;
+    if (isActive    !== undefined) allowed.isActive    = isActive;
+
+    const [updated] = await db.update(employees).set(allowed).where(eq(employees.id, parseInt(id))).returning();
+    return NextResponse.json({ employee: updated });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: NextRequest) {
+  const { auth, error } = await requireAuth(req);
+  if (error) return error;
+
+  try {
+    const { searchParams } = new URL(req.url);
+    const id = parseInt(searchParams.get("id") ?? "");
+    if (isNaN(id)) return NextResponse.json({ error: "id required" }, { status: 400 });
+
+    await db.update(employees).set({ isActive: false }).where(eq(employees.id, id));
+    return NextResponse.json({ success: true });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
+  }
+}
+
 export async function GET(req: NextRequest) {
   const { auth, error } = await requireAuth(req);
   if (error) return error;

@@ -37,15 +37,8 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ inventory, lowStock, isLow: lowStock.length > 0 });
   } catch {
-    // Table doesn't exist — return defaults with mock quantities
-    const mock = DEFAULT_CHEMICALS.map((c, i) => ({
-      id: i + 1, companyId: parseInt(companyId!),
-      name: c.name, unit: c.unit,
-      currentQty: Math.random() > 0.3 ? c.minQty + Math.floor(Math.random() * 10) : c.minQty - 1,
-      minQty: c.minQty, costPerUnit: c.costPerUnit,
-    }));
-    const lowStock = mock.filter((i) => i.currentQty <= i.minQty);
-    return NextResponse.json({ inventory: mock, lowStock, isLow: lowStock.length > 0 });
+    // Table doesn't exist yet — return empty inventory so user can add real items
+    return NextResponse.json({ inventory: [], lowStock: [], isLow: false });
   }
 }
 

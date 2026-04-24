@@ -10,6 +10,7 @@ const dmSans = DM_Sans({ subsets: ["latin"], variable: "--font-dm-sans", display
 const dmMono = DM_Mono({ subsets: ["latin"], weight: ["400","500"], variable: "--font-dm-mono", display: "swap" });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "https://poolpalai.com"),
   title:       "PoolPal AI — Pool Service, Automated",
   description: "AI-powered pool service management. Routes, chemistry, reports, invoicing — all in one platform.",
   manifest:    "/manifest.json",

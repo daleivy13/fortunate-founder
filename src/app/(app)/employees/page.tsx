@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Users, Plus, Phone, Mail, Star, Loader2 } from "lucide-react";
-import { useEmployees, useCreateEmployee } from "@/hooks/useData";
+import { Users, Plus, Phone, Mail, Star, Loader2, X } from "lucide-react";
+import { useEmployees, useCreateEmployee, useUpdateEmployee, useDeleteEmployee } from "@/hooks/useData";
 
 const AVATAR_COLORS = [
   "from-pool-500 to-[#00c3e3]",
@@ -14,37 +14,39 @@ const AVATAR_COLORS = [
 const ROLES = ["Technician", "Lead Technician", "Part-time Tech", "Manager"];
 
 function initials(name: string) {
-  return name
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
+  return name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
 }
+
+interface EmpForm { name: string; role: string; email: string; phone: string; hourlyRate: string; }
 
 export default function EmployeesPage() {
   const { data, isLoading } = useEmployees();
   const { mutateAsync: createEmployee, isPending } = useCreateEmployee();
+  const updateEmployee = useUpdateEmployee();
+  const deleteEmployee = useDeleteEmployee();
 
   const employees: any[] = data?.employees ?? [];
   const active = employees.filter((e) => e.isActive !== false);
 
-  const [showNew, setShowNew] = useState(false);
-  const [form, setForm] = useState({ name: "", role: "Technician", email: "", phone: "", hourlyRate: "" });
-  const [error, setError] = useState("");
+  const [showNew,  setShowNew]  = useState(false);
+  const [editing,  setEditing]  = useState<any | null>(null);
+  const [form,     setForm]     = useState<EmpForm>({ name: "", role: "Technician", email: "", phone: "", hourlyRate: "" });
+  const [editForm, setEditForm] = useState<EmpForm>({ name: "", role: "", email: "", phone: "", hourlyRate: "" });
+  const [error,    setError]    = useState("");
+  const [saving,   setSaving]   = useState(false);
 
-  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-    setForm((f) => ({ ...f, [k]: e.target.value }));
+  const set     = (k: keyof EmpForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const setEdit = (k: keyof EmpForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setEditForm((f) => ({ ...f, [k]: e.target.value }));
 
   const handleAdd = async () => {
     if (!form.name.trim()) { setError("Name is required"); return; }
     setError("");
     try {
       await createEmployee({
-        name: form.name.trim(),
-        role: form.role.toLowerCase().replace(/ /g, "_"),
-        email: form.email || null,
-        phone: form.phone || null,
+        name:       form.name.trim(),
+        role:       form.role.toLowerCase().replace(/ /g, "_"),
+        email:      form.email || null,
+        phone:      form.phone || null,
         hourlyRate: form.hourlyRate ? parseFloat(form.hourlyRate) : null,
       });
       setForm({ name: "", role: "Technician", email: "", phone: "", hourlyRate: "" });
@@ -52,6 +54,43 @@ export default function EmployeesPage() {
     } catch (err: any) {
       setError(err.message ?? "Failed to add employee");
     }
+  };
+
+  const openEdit = (emp: any) => {
+    setEditForm({
+      name:       emp.name ?? "",
+      role:       ROLES.find((r) => r.toLowerCase().replace(/ /g, "_") === emp.role) ?? "Technician",
+      email:      emp.email ?? "",
+      phone:      emp.phone ?? "",
+      hourlyRate: emp.hourlyRate ? String(emp.hourlyRate) : "",
+    });
+    setEditing(emp);
+    setError("");
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editForm.name.trim()) { setError("Name is required"); return; }
+    setError("");
+    setSaving(true);
+    try {
+      await updateEmployee.mutateAsync({
+        id:         editing.id,
+        name:       editForm.name.trim(),
+        role:       editForm.role.toLowerCase().replace(/ /g, "_"),
+        email:      editForm.email || null,
+        phone:      editForm.phone || null,
+        hourlyRate: editForm.hourlyRate || null,
+      });
+      setEditing(null);
+    } catch (err: any) {
+      setError(err.message ?? "Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeactivate = async (id: number) => {
+    await deleteEmployee.mutateAsync(id);
   };
 
   return (
@@ -85,7 +124,7 @@ export default function EmployeesPage() {
 
       <div className="grid lg:grid-cols-2 gap-4">
         {employees.map((emp, i) => (
-          <div key={emp.id} className="card p-5">
+          <div key={emp.id} className={`card p-5 ${emp.isActive === false ? "opacity-50" : ""}`}>
             <div className="flex items-start gap-4">
               <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${AVATAR_COLORS[i % AVATAR_COLORS.length]} flex items-center justify-center text-white font-bold text-sm flex-shrink-0`}>
                 {initials(emp.name)}
@@ -115,7 +154,7 @@ export default function EmployeesPage() {
                 </div>
 
                 <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
+                  <div>
                     {emp.hourlyRate && (
                       <div>
                         <p className="text-xs text-slate-400">Rate</p>
@@ -124,7 +163,17 @@ export default function EmployeesPage() {
                     )}
                   </div>
                   <div className="flex gap-2">
-                    <button className="btn-outline text-xs py-1 px-2.5">Edit</button>
+                    {emp.isActive !== false && (
+                      <>
+                        <button onClick={() => openEdit(emp)} className="btn-outline text-xs py-1 px-2.5">Edit</button>
+                        <button
+                          onClick={() => handleDeactivate(emp.id)}
+                          className="text-xs text-red-500 hover:text-red-700 font-medium px-2"
+                        >
+                          Remove
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
@@ -133,14 +182,18 @@ export default function EmployeesPage() {
         ))}
       </div>
 
+      {/* Add Employee Modal */}
       {showNew && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setShowNew(false)}>
           <div className="card p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-            <h2 className="font-bold text-slate-900 text-lg mb-4">Add Employee</h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-bold text-slate-900 text-lg">Add Employee</h2>
+              <button onClick={() => setShowNew(false)} className="p-1 hover:bg-slate-100 rounded-lg">
+                <X className="w-4 h-4 text-slate-500" />
+              </button>
+            </div>
 
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-2.5 text-sm mb-4">{error}</div>
-            )}
+            {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-2.5 text-sm mb-4">{error}</div>}
 
             <div className="space-y-3">
               <div>
@@ -173,6 +226,56 @@ export default function EmployeesPage() {
               <button onClick={() => setShowNew(false)} className="btn-outline flex-1">Cancel</button>
               <button onClick={handleAdd} disabled={isPending} className="btn-primary flex-1">
                 {isPending ? <><Loader2 className="w-4 h-4 animate-spin" /> Adding...</> : "Add Employee"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Employee Modal */}
+      {editing && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={() => setEditing(null)}>
+          <div className="card p-6 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-bold text-slate-900 text-lg">Edit Employee</h2>
+              <button onClick={() => setEditing(null)} className="p-1 hover:bg-slate-100 rounded-lg">
+                <X className="w-4 h-4 text-slate-500" />
+              </button>
+            </div>
+
+            {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-2.5 text-sm mb-4">{error}</div>}
+
+            <div className="space-y-3">
+              <div>
+                <label className="label">Full Name <span className="text-red-500">*</span></label>
+                <input className="input" value={editForm.name} onChange={setEdit("name")} />
+              </div>
+              <div>
+                <label className="label">Role</label>
+                <select className="input" value={editForm.role} onChange={setEdit("role")}>
+                  {ROLES.map((r) => <option key={r}>{r}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="label">Email</label>
+                <input className="input" type="email" value={editForm.email} onChange={setEdit("email")} />
+              </div>
+              <div>
+                <label className="label">Phone</label>
+                <input className="input" type="tel" value={editForm.phone} onChange={setEdit("phone")} />
+              </div>
+              <div>
+                <label className="label">Hourly Rate</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
+                  <input className="input pl-6" type="number" placeholder="22.00" value={editForm.hourlyRate} onChange={setEdit("hourlyRate")} />
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button onClick={() => setEditing(null)} className="btn-outline flex-1">Cancel</button>
+              <button onClick={handleSaveEdit} disabled={saving} className="btn-primary flex-1">
+                {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</> : "Save Changes"}
               </button>
             </div>
           </div>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Waves, ArrowLeft, Zap, Lock, AlertTriangle, CheckCircle2 } from "lucide-react";
 
 interface Dosage {
@@ -280,10 +281,12 @@ export default function HomeownerCheckPage() {
                 adding a small amount of acid every week prevents the dramatic swings you're seeing.
               </p>
               <div className="absolute inset-0 flex items-center justify-center">
-                <button className="flex items-center gap-2 bg-pool-500 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-pool-600 transition-colors">
-                  <Lock className="w-3.5 h-3.5" />
-                  Upgrade for AI Explanations
-                </button>
+                <Link href="/homeowner/upgrade">
+                  <button className="flex items-center gap-2 bg-pool-500 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-pool-600 transition-colors">
+                    <Lock className="w-3.5 h-3.5" />
+                    Upgrade for AI Explanations
+                  </button>
+                </Link>
               </div>
             </div>
           )}
@@ -309,9 +312,11 @@ export default function HomeownerCheckPage() {
                 </div>
               ))}
             </div>
-            <button className="w-full bg-white text-pool-700 font-bold py-3 rounded-xl hover:bg-pool-50 transition-colors">
-              Start Free Trial — $9/month
-            </button>
+            <Link href="/homeowner/upgrade" className="block w-full">
+              <button className="w-full bg-white text-pool-700 font-bold py-3 rounded-xl hover:bg-pool-50 transition-colors">
+                Start Free Trial — $9/month
+              </button>
+            </Link>
             <p className="text-center text-white/50 text-xs mt-2">14-day free trial. Cancel anytime.</p>
           </div>
         )}

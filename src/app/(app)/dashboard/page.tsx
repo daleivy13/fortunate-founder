@@ -39,7 +39,6 @@ export default function DashboardPage() {
     .slice(0, 20)
     .filter((item: any) => {
       const r = item.report ?? item;
-      const reading = item.pool ? r : null;
       return r.issuesFound;
     })
     .slice(0, 2)
