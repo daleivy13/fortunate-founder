@@ -255,6 +255,36 @@ export const referralCredits = pgTable("referral_credits", {
   createdAt:   timestamp("created_at").defaultNow(),
 });
 
+// ── Pool Equipment ─────────────────────────────────────────────────────────────
+export const poolEquipment = pgTable("pool_equipment", {
+  id:           serial("id").primaryKey(),
+  poolId:       integer("pool_id").references(() => pools.id).notNull(),
+  category:     text("category").notNull(), // pump | filter | heater | salt_cell | light | cleaner | other
+  brand:        text("brand"),
+  model:        text("model"),
+  serialNumber: text("serial_number"),
+  installedAt:  timestamp("installed_at"),
+  warrantyExp:  timestamp("warranty_exp"),
+  notes:        text("notes"),
+  isActive:     boolean("is_active").default(true),
+  createdAt:    timestamp("created_at").defaultNow(),
+});
+
+// ── AquaLink / Pool Automation Connections ─────────────────────────────────────
+export const aqualinkConnections = pgTable("aqualink_connections", {
+  id:           serial("id").primaryKey(),
+  poolId:       integer("pool_id").references(() => pools.id).notNull().unique(),
+  username:     text("username").notNull(),
+  // token is stored encrypted; we never store plaintext passwords
+  sessionToken: text("session_token"),
+  systemId:     text("system_id"),
+  systemName:   text("system_name"),
+  lastSyncAt:   timestamp("last_sync_at"),
+  lastStatus:   text("last_status"),   // JSON blob of latest device states
+  isActive:     boolean("is_active").default(true),
+  createdAt:    timestamp("created_at").defaultNow(),
+});
+
 // ── Homeowner Profiles ────────────────────────────────────────────────────────
 export const homeownerProfiles = pgTable("homeowner_profiles", {
   id:           serial("id").primaryKey(),

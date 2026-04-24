@@ -247,3 +247,72 @@ export function useMileage() {
     enabled: !!user,
   });
 }
+
+// ── Equipment ─────────────────────────────────────────────────────────────────
+export function useEquipment(poolId: number) {
+  return useQuery({
+    queryKey: ["equipment", poolId],
+    queryFn: async () => {
+      const res = await fetch(`/api/equipment?poolId=${poolId}`);
+      if (!res.ok) throw new Error("Failed to fetch equipment");
+      return res.json() as Promise<{ equipment: any[] }>;
+    },
+    enabled: !!poolId,
+  });
+}
+
+export function useCreateEquipment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: Record<string, any>) => {
+      const res = await fetch("/api/equipment", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error ?? "Failed to add equipment"); }
+      return res.json();
+    },
+    onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: ["equipment", vars.poolId] }),
+  });
+}
+
+export function useDeleteEquipment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, poolId }: { id: number; poolId: number }) => {
+      const res = await fetch(`/api/equipment?id=${id}`, { method: "DELETE" });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error ?? "Failed to remove equipment"); }
+      return res.json();
+    },
+    onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: ["equipment", vars.poolId] }),
+  });
+}
+
+// ── AquaLink ──────────────────────────────────────────────────────────────────
+export function useAquaLink(poolId: number) {
+  return useQuery({
+    queryKey: ["aqualink", poolId],
+    queryFn: async () => {
+      const res = await fetch(`/api/aqualink?poolId=${poolId}`);
+      if (!res.ok) throw new Error("Failed to fetch AquaLink status");
+      return res.json();
+    },
+    enabled: !!poolId,
+    refetchInterval: 30000, // poll every 30s when panel is open
+  });
+}
+
+export function useAquaLinkControl() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (data: { poolId: number; deviceId: string; state: boolean; value?: number }) => {
+      const res = await fetch("/api/aqualink/control", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error ?? "Control failed"); }
+      return res.json();
+    },
+    onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: ["aqualink", vars.poolId] }),
+  });
+}

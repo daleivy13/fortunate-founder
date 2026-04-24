@@ -192,6 +192,7 @@ function NewReportForm({ onBack, defaultPoolId }: { onBack: () => void; defaultP
   const [temp,    setTemp]    = useState("");
   const [issues,  setIssues]  = useState("");
   const [notes,   setNotes]   = useState("");
+  const [dosages, setDosages] = useState<{ chemical: string; amount: string; unit: string }[]>([]);
   const [photos,  setPhotos]  = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [done,    setDone]    = useState(false);
@@ -235,6 +236,11 @@ function NewReportForm({ onBack, defaultPoolId }: { onBack: () => void; defaultP
     if (!poolId) { setError("Please select a pool"); return; }
     setError("");
     try {
+      const chemicalsUsedStr = dosages
+        .filter(d => d.chemical && d.amount)
+        .map(d => `${d.amount}${d.unit} ${d.chemical}`)
+        .join(", ");
+
       const res = await createReport({
         poolId,
         freeChlorine:    cl    || null,
@@ -242,9 +248,11 @@ function NewReportForm({ onBack, defaultPoolId }: { onBack: () => void; defaultP
         totalAlkalinity: ta    || null,
         waterTemp:       temp  || null,
         ...checks,
-        issuesFound: issues || null,
-        techNotes:   notes  || null,
-        photos:      photos.length > 0 ? photos : null,
+        chemicalsAdded:  dosages.some(d => d.chemical && d.amount) ? true : checks.chemicalsAdded,
+        chemicalsUsed:   chemicalsUsedStr || null,
+        issuesFound:     issues || null,
+        techNotes:       notes  || null,
+        photos:          photos.length > 0 ? photos : null,
       });
       setReportId(res.report.id);
       setDone(true);
@@ -358,13 +366,68 @@ function NewReportForm({ onBack, defaultPoolId }: { onBack: () => void; defaultP
             />
           </div>
 
+          {/* Chemical Dosage Log */}
+          <div className="card p-5">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-bold text-slate-900">Chemicals Added</h2>
+              <button
+                type="button"
+                onClick={() => setDosages(d => [...d, { chemical: "", amount: "", unit: "fl oz" }])}
+                className="text-xs text-pool-600 hover:underline font-medium flex items-center gap-1"
+              >
+                <Plus className="w-3 h-3" /> Add
+              </button>
+            </div>
+            {dosages.length === 0 ? (
+              <p className="text-sm text-slate-400">No chemicals logged yet — tap Add to record what was added.</p>
+            ) : (
+              <div className="space-y-2">
+                {dosages.map((d, i) => (
+                  <div key={i} className="flex gap-2 items-center">
+                    <input
+                      className="input flex-1 text-sm"
+                      placeholder="Chemical name"
+                      value={d.chemical}
+                      onChange={e => setDosages(prev => prev.map((x, j) => j === i ? { ...x, chemical: e.target.value } : x))}
+                    />
+                    <input
+                      type="number"
+                      className="input w-20 text-sm"
+                      placeholder="Qty"
+                      value={d.amount}
+                      onChange={e => setDosages(prev => prev.map((x, j) => j === i ? { ...x, amount: e.target.value } : x))}
+                    />
+                    <select
+                      className="input w-20 text-sm"
+                      value={d.unit}
+                      onChange={e => setDosages(prev => prev.map((x, j) => j === i ? { ...x, unit: e.target.value } : x))}
+                    >
+                      <option>fl oz</option>
+                      <option>lbs</option>
+                      <option>gal</option>
+                      <option>tabs</option>
+                      <option>cups</option>
+                    </select>
+                    <button
+                      onClick={() => setDosages(prev => prev.filter((_, j) => j !== i))}
+                      className="text-slate-300 hover:text-red-400"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className="text-xs text-slate-400 mt-2">This logs exact amounts for client reports, inventory depletion, and profitability tracking.</p>
+          </div>
+
           {/* Notes */}
           <div className="card p-5">
             <h2 className="font-bold text-slate-900 mb-3">Tech Notes</h2>
             <textarea
               className="input resize-none"
               rows={4}
-              placeholder="Chemicals added, observations, customer requests..."
+              placeholder="Observations, equipment issues, customer requests..."
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
             />

@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs grep *)",
+      "Bash(npm run *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(npx drizzle-kit *)",
+      "Bash(DATABASE_URL=\"postgresql://neondb_owner:npg_1tsdhep7HaBK@ep-shiny-water-amdtyesh.c-5.us-east-1.aws.neon.tech/neondb?sslmode=require\" npx drizzle-kit push)",
+      "Bash(node *)"
+    ]
+  }
+}

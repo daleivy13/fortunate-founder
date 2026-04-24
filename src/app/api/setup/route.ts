@@ -14,6 +14,7 @@ const checks = [
   { key: "STRIPE_PRICE_ENT_USD",              label: "Stripe Price: Enterprise",     required: true  },
   { key: "STRIPE_PRICE_HOMEOWNER",            label: "Stripe Price: Homeowner $9",   required: false },
   { key: "RESEND_API_KEY",                    label: "Resend Email",                 required: true  },
+  { key: "CF_ACCOUNT_ID",                     label: "Cloudflare R2 (photo storage)",required: false },
   { key: "OPENWEATHER_API_KEY",               label: "OpenWeatherMap (routes)",      required: false },
   { key: "NEXT_PUBLIC_GOOGLE_MAPS_API_KEY",   label: "Google Maps (GPS)",            required: false },
   { key: "NEXT_PUBLIC_APP_URL",               label: "App URL (production domain)",  required: false },
