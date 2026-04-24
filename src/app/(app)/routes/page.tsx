@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Navigation, CheckCircle2, Clock, Car, Thermometer, Droplets, Wind, Sun, ChevronDown, ChevronUp, ClipboardList, Zap, Loader2 } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Navigation, CheckCircle2, Clock, Car, Thermometer, Droplets, Wind, Sun, ChevronDown, ChevronUp, ClipboardList, Zap, Loader2, GripVertical, ArrowUp, ArrowDown } from "lucide-react";
 import { useGPS } from "@/hooks/useGPS";
 import { usePools } from "@/hooks/useData";
 import { useAuth } from "@/contexts/AuthContext";
@@ -203,17 +203,41 @@ export default function SmartRoutesPage() {
         </div>
       )}
 
-      {/* Stop cards */}
+      {/* Stop cards with drag-and-drop reordering */}
       <div className="space-y-3">
-        {stops.map((stop) => {
+        {stops.map((stop, idx) => {
           const s   = stop.status;
           const p   = P_STYLES[stop.brief.priority as keyof typeof P_STYLES] ?? P_STYLES.normal;
           const isExp = expanded === stop.id;
+
+          const moveUp = () => setStops(prev => {
+            if (idx === 0) return prev;
+            const next = [...prev];
+            [next[idx-1], next[idx]] = [next[idx], next[idx-1]];
+            return next;
+          });
+          const moveDown = () => setStops(prev => {
+            if (idx === prev.length - 1) return prev;
+            const next = [...prev];
+            [next[idx], next[idx+1]] = [next[idx+1], next[idx]];
+            return next;
+          });
 
           return (
             <div key={stop.id} className={`card border ${p.border} overflow-hidden`}>
               <div className="p-4">
                 <div className="flex items-start gap-3">
+                  {/* Reorder controls */}
+                  {stop.status !== "complete" && (
+                    <div className="flex flex-col gap-0.5 flex-shrink-0 mt-0.5">
+                      <button onClick={moveUp} disabled={idx === 0} className="p-0.5 text-slate-300 hover:text-slate-600 disabled:opacity-20">
+                        <ArrowUp className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={moveDown} disabled={idx === stops.length - 1} className="p-0.5 text-slate-300 hover:text-slate-600 disabled:opacity-20">
+                        <ArrowDown className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
                   <div className="flex-shrink-0 mt-0.5">
                     {s === "complete"
                       ? <CheckCircle2 className="w-5 h-5 text-emerald-500" />

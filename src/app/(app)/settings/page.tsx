@@ -92,7 +92,11 @@ const ADDONS = [
 
 export default function SettingsPage() {
   const { user, company, signOut, refreshCompany } = useAuth();
-  const [tab, setTab] = useState<"billing" | "profile" | "addons">("billing");
+  const [tab, setTab] = useState<"billing" | "profile" | "addons" | "integrations">("billing");
+  const [smsSegment, setSmsSegment] = useState<"all"|"residential"|"commercial"|"hoa">("all");
+  const [smsMessage, setSmsMessage] = useState("");
+  const [smsSending, setSmsSending] = useState(false);
+  const [smsResult, setSmsResult] = useState<{ sent: number; total: number } | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
   const [annual, setAnnual] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
@@ -162,8 +166,8 @@ export default function SettingsPage() {
         <p className="text-slate-500 text-sm mt-1">Manage your subscription, profile, and preferences</p>
       </div>
 
-      <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit">
-        {(["billing", "addons", "profile"] as const).map((t) => (
+      <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit flex-wrap">
+        {(["billing", "addons", "integrations", "profile"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -171,7 +175,7 @@ export default function SettingsPage() {
               tab === t ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
             }`}
           >
-            {t === "addons" ? "Add-ons" : t}
+            {t === "addons" ? "Add-ons" : t.charAt(0).toUpperCase()+t.slice(1)}
           </button>
         ))}
       </div>
@@ -313,6 +317,137 @@ export default function SettingsPage() {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {tab === "integrations" && (
+        <div className="space-y-6">
+          {/* QuickBooks */}
+          <div className="card p-6">
+            <div className="flex items-start justify-between">
+              <div>
+                <h2 className="font-bold text-slate-900 text-lg flex items-center gap-2">
+                  <span className="text-xl">📊</span> QuickBooks Online
+                </h2>
+                <p className="text-slate-500 text-sm mt-1">Sync invoices and mileage directly to your QuickBooks account. Your accountant will love you.</p>
+              </div>
+              <a
+                href={`/api/quickbooks?action=connect&companyId=${company?.id}`}
+                className="btn-primary text-sm flex-shrink-0"
+              >
+                Connect QuickBooks
+              </a>
+            </div>
+            <div className="mt-4 bg-slate-50 rounded-xl p-4 space-y-2">
+              {[
+                "Invoices auto-sync when marked paid",
+                "Mileage logs export as expense reports",
+                "Customer records stay in sync",
+                "One-click tax-ready P&L export",
+              ].map(f => (
+                <div key={f} className="flex items-center gap-2 text-sm text-slate-600">
+                  <div className="w-4 h-4 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                    <span className="text-emerald-600 text-[10px]">✓</span>
+                  </div>
+                  {f}
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-slate-400 mt-3">
+              Requires QUICKBOOKS_CLIENT_ID and QUICKBOOKS_CLIENT_SECRET in your environment. See .env.example.
+            </p>
+          </div>
+
+          {/* Bulk SMS */}
+          <div className="card p-6 space-y-4">
+            <div>
+              <h2 className="font-bold text-slate-900 text-lg flex items-center gap-2">
+                <span className="text-xl">📱</span> Bulk Client SMS
+              </h2>
+              <p className="text-slate-500 text-sm mt-1">Send a text to all your clients at once — service reminders, notices, holiday closures.</p>
+            </div>
+
+            <div>
+              <label className="label">Send to</label>
+              <select className="input" value={smsSegment} onChange={e => setSmsSegment(e.target.value as any)}>
+                <option value="all">All clients</option>
+                <option value="residential">Residential only</option>
+                <option value="commercial">Commercial only</option>
+                <option value="hoa">HOA only</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="label flex items-center justify-between">
+                Message
+                <span className={`text-xs font-normal ${smsMessage.length > 150 ? "text-red-500" : "text-slate-400"}`}>
+                  {smsMessage.length}/160
+                </span>
+              </label>
+              <textarea
+                className="input resize-none"
+                rows={3}
+                maxLength={160}
+                placeholder="Hi {first name}, reminder that we'll be in your area this Tuesday. Reply STOP to opt out."
+                value={smsMessage}
+                onChange={e => setSmsMessage(e.target.value)}
+              />
+            </div>
+
+            {smsResult && (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 text-sm text-emerald-800">
+                ✓ Sent to {smsResult.sent} of {smsResult.total} clients
+              </div>
+            )}
+
+            <button
+              disabled={smsSending || !smsMessage.trim()}
+              onClick={async () => {
+                if (!company || !smsMessage.trim()) return;
+                setSmsSending(true);
+                setSmsResult(null);
+                try {
+                  const res = await fetch("/api/sms/bulk", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ companyId: company.id, message: smsMessage, segment: smsSegment }),
+                  });
+                  const d = await res.json();
+                  if (res.ok) { setSmsResult({ sent: d.sent, total: d.total }); setSmsMessage(""); }
+                  else alert(d.error ?? "Send failed");
+                } catch { alert("Failed to send"); }
+                setSmsSending(false);
+              }}
+              className="btn-primary w-full"
+            >
+              {smsSending ? "Sending…" : `Send SMS to ${smsSegment === "all" ? "All" : smsSegment.charAt(0).toUpperCase()+smsSegment.slice(1)} Clients`}
+            </button>
+            <p className="text-xs text-slate-400">Requires TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER in your environment.</p>
+          </div>
+
+          {/* Twilio / Resend status */}
+          <div className="card p-5">
+            <h2 className="font-bold text-slate-900 mb-3">Integration Status</h2>
+            <div className="space-y-2.5">
+              {[
+                { name: "Stripe Payments",   configured: true,  note: "Invoicing and subscriptions" },
+                { name: "Resend Email",       configured: true,  note: "Service report delivery" },
+                { name: "QuickBooks",         configured: false, note: "Add QUICKBOOKS_CLIENT_ID to enable" },
+                { name: "Twilio SMS",         configured: false, note: "Add TWILIO_ACCOUNT_SID to enable" },
+                { name: "Cloudflare R2",      configured: false, note: "Add CF_ACCOUNT_ID to enable photo storage" },
+                { name: "OpenWeatherMap",     configured: false, note: "Add OPENWEATHER_API_KEY for route intelligence" },
+              ].map(item => (
+                <div key={item.name} className="flex items-center gap-3">
+                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${item.configured ? "bg-emerald-500" : "bg-slate-300"}`} />
+                  <div className="flex-1">
+                    <span className="text-sm font-medium text-slate-900">{item.name}</span>
+                    <span className="text-xs text-slate-400 ml-2">{item.note}</span>
+                  </div>
+                  <a href="/setup" className="text-xs text-pool-600 hover:underline">Configure →</a>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}

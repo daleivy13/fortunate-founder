@@ -1,12 +1,13 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { usePool, useEquipment, useCreateEquipment, useDeleteEquipment, useAquaLink, useAquaLinkControl } from "@/hooks/useData";
 import {
   ArrowLeft, Waves, Phone, Mail, MapPin, FlaskConical,
   FileText, AlertTriangle, CheckCircle2, Clock, Link2,
   Wrench, Plus, Trash2, Zap, Thermometer, Droplets, Wind,
-  Power, Settings2, Camera, X, Loader2,
+  Power, Settings2, Camera, X, Loader2, ClipboardList, RefreshCw,
 } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
@@ -29,7 +30,7 @@ const EQUIPMENT_CATEGORIES = [
   { value: "other",    label: "Other",        icon: "🔧" },
 ];
 
-type TabType = "overview" | "equipment" | "aqualink";
+type TabType = "overview" | "equipment" | "aqualink" | "tasks";
 
 // ── AquaLink Panel ─────────────────────────────────────────────────────────────
 function AquaLinkPanel({ poolId }: { poolId: number }) {
@@ -342,6 +343,114 @@ function EquipmentPanel({ poolId }: { poolId: number }) {
   );
 }
 
+// ── Service Tasks Panel ────────────────────────────────────────────────────────
+function TasksPanel({ poolId }: { poolId: number }) {
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ["pool-tasks", poolId],
+    queryFn: async () => {
+      const res = await fetch(`/api/pools/tasks?poolId=${poolId}`);
+      if (!res.ok) throw new Error("Failed to load tasks");
+      return res.json();
+    },
+    enabled: !!poolId,
+  });
+
+  const qc = useQueryClient();
+  const completeTask = useMutation({
+    mutationFn: async (taskId: number) => {
+      const res = await fetch("/api/pools/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ taskId, completedAt: new Date().toISOString() }),
+      });
+      if (!res.ok) throw new Error("Failed to complete task");
+      return res.json();
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["pool-tasks", poolId] }),
+  });
+
+  const tasks: any[] = data?.tasks ?? [];
+  const overdue  = tasks.filter((t: any) => t.daysUntilDue < 0);
+  const dueSoon  = tasks.filter((t: any) => t.daysUntilDue >= 0 && t.daysUntilDue <= 7);
+  const upcoming = tasks.filter((t: any) => t.daysUntilDue > 7);
+
+  if (isLoading) return <div className="flex justify-center py-12"><Loader2 className="w-5 h-5 animate-spin text-slate-400" /></div>;
+
+  const TaskRow = ({ task }: { task: any }) => {
+    const isOverdue = task.daysUntilDue < 0;
+    const isSoon    = task.daysUntilDue >= 0 && task.daysUntilDue <= 7;
+    return (
+      <div className={`flex items-center gap-3 py-3 border-b border-slate-100 last:border-0 ${isOverdue ? "bg-red-50 -mx-4 px-4" : ""}`}>
+        <span className="text-lg flex-shrink-0">{task.icon ?? "📋"}</span>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-slate-900 truncate">{task.name}</p>
+          <p className={`text-xs ${isOverdue ? "text-red-600 font-semibold" : isSoon ? "text-amber-600 font-semibold" : "text-slate-400"}`}>
+            {isOverdue
+              ? `${Math.abs(task.daysUntilDue)} days overdue`
+              : task.daysUntilDue === 0
+              ? "Due today"
+              : `Due in ${task.daysUntilDue} days`}
+            {" · "}{task.category}
+          </p>
+        </div>
+        <button
+          onClick={() => completeTask.mutate(task.id)}
+          disabled={completeTask.isPending}
+          className="btn-secondary text-xs py-1.5 px-3 flex-shrink-0"
+        >
+          ✓ Done
+        </button>
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-slate-500">{tasks.length} scheduled maintenance tasks</p>
+        <button onClick={() => refetch()} className="text-xs text-pool-600 hover:underline flex items-center gap-1">
+          <RefreshCw className="w-3 h-3" /> Refresh
+        </button>
+      </div>
+
+      {overdue.length > 0 && (
+        <div className="card overflow-hidden">
+          <div className="bg-red-50 px-4 py-2 border-b border-red-100">
+            <p className="text-xs font-bold text-red-700">⚠ Overdue ({overdue.length})</p>
+          </div>
+          <div className="px-4">{overdue.map((t: any) => <TaskRow key={t.id} task={t} />)}</div>
+        </div>
+      )}
+
+      {dueSoon.length > 0 && (
+        <div className="card overflow-hidden">
+          <div className="bg-amber-50 px-4 py-2 border-b border-amber-100">
+            <p className="text-xs font-bold text-amber-700">Due this week ({dueSoon.length})</p>
+          </div>
+          <div className="px-4">{dueSoon.map((t: any) => <TaskRow key={t.id} task={t} />)}</div>
+        </div>
+      )}
+
+      {upcoming.length > 0 && (
+        <div className="card overflow-hidden">
+          <div className="bg-slate-50 px-4 py-2 border-b border-slate-100">
+            <p className="text-xs font-bold text-slate-500">Upcoming ({upcoming.length})</p>
+          </div>
+          <div className="px-4">{upcoming.map((t: any) => <TaskRow key={t.id} task={t} />)}</div>
+        </div>
+      )}
+
+      {tasks.length === 0 && (
+        <div className="text-center py-12 text-slate-400">
+          <ClipboardList className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p className="text-sm font-medium">No tasks scheduled</p>
+          <p className="text-xs mt-1">Tasks are auto-generated when you first view a pool.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main Page ──────────────────────────────────────────────────────────────────
 export default function PoolDetailPage() {
   const { id } = useParams();
@@ -409,6 +518,7 @@ export default function PoolDetailPage() {
 
   const TABS: { id: TabType; label: string; icon: React.ReactNode }[] = [
     { id: "overview",  label: "Overview",  icon: <Waves className="w-4 h-4" /> },
+    { id: "tasks",     label: "Tasks",     icon: <ClipboardList className="w-4 h-4" /> },
     { id: "equipment", label: "Equipment", icon: <Wrench className="w-4 h-4" /> },
     { id: "aqualink",  label: "AquaLink",  icon: <Zap className="w-4 h-4" /> },
   ];
@@ -452,6 +562,10 @@ export default function PoolDetailPage() {
           </button>
         ))}
       </div>
+
+      {tab === "tasks" && (
+        <TasksPanel poolId={pool.id} />
+      )}
 
       {tab === "equipment" && (
         <EquipmentPanel poolId={pool.id} />
@@ -521,9 +635,13 @@ export default function PoolDetailPage() {
             )}
 
             {/* Quick links to other tabs */}
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
+              <button onClick={() => setTab("tasks")} className="card p-3 text-center hover:border-pool-300 transition-colors cursor-pointer">
+                <ClipboardList className="w-5 h-5 text-pool-500 mx-auto mb-1" />
+                <p className="text-xs font-medium text-slate-700">Tasks</p>
+              </button>
               <button onClick={() => setTab("equipment")} className="card p-3 text-center hover:border-pool-300 transition-colors cursor-pointer">
-                <Wrench className="w-5 h-5 text-pool-500 mx-auto mb-1" />
+                <Wrench className="w-5 h-5 text-slate-500 mx-auto mb-1" />
                 <p className="text-xs font-medium text-slate-700">Equipment</p>
               </button>
               <button onClick={() => setTab("aqualink")} className="card p-3 text-center hover:border-pool-300 transition-colors cursor-pointer">

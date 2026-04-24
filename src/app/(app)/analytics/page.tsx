@@ -4,8 +4,8 @@ import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis,
   CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell,
 } from "recharts";
-import { Loader2 } from "lucide-react";
-import { useAnalytics, useMileage, usePools } from "@/hooks/useData";
+import { Loader2, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { useAnalytics, useMileage, usePools, useInvoices } from "@/hooks/useData";
 
 const POOL_COLORS = ["#0ea5e9", "#1756a9", "#6366f1"];
 
@@ -13,6 +13,7 @@ export default function AnalyticsPage() {
   const { data: analytics, isLoading: loadingAnalytics } = useAnalytics();
   const { data: mileageData, isLoading: loadingMileage } = useMileage();
   const { data: poolsData } = usePools();
+  const { data: invoicesData } = useInvoices();
 
   const isLoading = loadingAnalytics || loadingMileage;
 
@@ -27,8 +28,25 @@ export default function AnalyticsPage() {
   const taxDeduction = Math.round(totalMiles * 0.67 * 100) / 100;
   const estSavings   = Math.round(taxDeduction * 0.22 * 100) / 100;
 
+  // Per-pool profitability — revenue from paid invoices per pool vs monthly rate
+  const invoices: any[] = invoicesData?.invoices ?? [];
+  const allPools: any[] = poolsData?.pools ?? [];
+  const poolProfitability = allPools
+    .filter(p => p.monthlyRate)
+    .map(p => {
+      const poolInvoices = invoices.filter(inv => inv.poolId === p.id || inv.pool_id === p.id);
+      const earned = poolInvoices.filter(inv => inv.status === "paid").reduce((s: number, inv: any) => s + (inv.amount ?? 0), 0);
+      const rate = p.monthlyRate ?? 0;
+      // Rough chemical cost estimate: $25/visit baseline
+      const visits = poolInvoices.length;
+      const estChemCost = visits * 25;
+      const margin = rate > 0 ? Math.round(((rate - estChemCost / Math.max(visits, 1)) / rate) * 100) : null;
+      return { name: p.name, clientName: p.clientName, rate, earned, visits, margin };
+    })
+    .sort((a, b) => (b.margin ?? 0) - (a.margin ?? 0));
+
   // Pool type breakdown from real pools
-  const pools: any[] = poolsData?.pools ?? [];
+  const pools: any[] = allPools;
   const poolTypes = [
     { name: "Residential", value: pools.filter((p) => p.type === "residential" || !p.type).length, color: POOL_COLORS[0] },
     { name: "HOA",         value: pools.filter((p) => p.type === "hoa").length,                    color: POOL_COLORS[1] },
@@ -126,6 +144,53 @@ export default function AnalyticsPage() {
           )}
         </div>
       </div>
+
+      {/* Per-pool profitability */}
+      {poolProfitability.length > 0 && (
+        <div className="card p-5">
+          <div className="mb-4">
+            <h2 className="font-bold text-slate-900">Pool Profitability</h2>
+            <p className="text-xs text-slate-400 mt-0.5">Based on monthly rate vs estimated chemical cost ($25/visit). Add actual costs in reports for exact margins.</p>
+          </div>
+          <div className="space-y-3">
+            {poolProfitability.map((pool) => {
+              const margin = pool.margin ?? 0;
+              const isHigh = margin >= 70;
+              const isLow  = margin < 40;
+              return (
+                <div key={pool.name} className="flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <div>
+                        <span className="text-sm font-medium text-slate-900 truncate">{pool.name}</span>
+                        <span className="text-xs text-slate-400 ml-2">{pool.clientName}</span>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span className="text-xs text-slate-500">${pool.rate}/mo</span>
+                        {pool.margin !== null && (
+                          <span className={`text-xs font-bold flex items-center gap-0.5 ${isHigh ? "text-emerald-600" : isLow ? "text-red-500" : "text-amber-600"}`}>
+                            {isHigh ? <TrendingUp className="w-3 h-3" /> : isLow ? <TrendingDown className="w-3 h-3" /> : <Minus className="w-3 h-3" />}
+                            {margin}% margin
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all ${isHigh ? "bg-emerald-500" : isLow ? "bg-red-400" : "bg-amber-400"}`}
+                        style={{ width: `${Math.min(100, Math.max(0, margin))}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <p className="text-xs text-slate-400 mt-4">
+            💡 Pools below 40% margin may need a rate increase. Log actual chemical costs in service reports for exact figures.
+          </p>
+        </div>
+      )}
 
       {/* Empty state if no data */}
       {poolCount === 0 && (

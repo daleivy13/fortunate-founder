@@ -17,6 +17,7 @@ const NAV = [
   { href: "/routes",     label: "Routes & GPS", icon: MapPin,          group: "main" },
   { href: "/reports",    label: "Reports",      icon: FileText,        group: "main" },
   { href: "/inventory",  label: "Inventory",    icon: Package,         group: "main" },
+  { href: "/work-orders",label: "Work Orders",  icon: Wrench,          group: "business" },
   { href: "/invoices",   label: "Invoices",     icon: Receipt,         group: "business" },
   { href: "/employees",  label: "Employees",    icon: Users,           group: "business" },
   { href: "/analytics",  label: "Analytics",    icon: BarChart3,       group: "business" },
