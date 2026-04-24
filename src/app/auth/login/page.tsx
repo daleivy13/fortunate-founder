@@ -1,14 +1,17 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Waves, Mail, Lock, Eye, EyeOff } from "lucide-react";
 
-export default function LoginPage() {
+function LoginForm() {
   const { signInWithGoogle, signInWithApple, signInWithEmail, signUpWithEmail } =
     useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectTo = searchParams.get("redirect") ?? "/dashboard";
+
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -26,7 +29,7 @@ export default function LoginPage() {
       } else {
         await signUpWithEmail(email, password);
       }
-      router.push("/dashboard");
+      router.push(redirectTo);
     } catch (e: any) {
       setError(e.message?.replace("Firebase: ", "") ?? "Authentication failed");
     } finally {
@@ -38,7 +41,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await signInWithGoogle();
-      router.push("/dashboard");
+      router.push(redirectTo);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -50,7 +53,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await signInWithApple();
-      router.push("/dashboard");
+      router.push(redirectTo);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -209,5 +212,13 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><div className="w-8 h-8 border-2 border-pool-500 border-t-transparent rounded-full animate-spin" /></div>}>
+      <LoginForm />
+    </Suspense>
   );
 }
