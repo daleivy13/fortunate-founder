@@ -2,13 +2,26 @@
 
 import { useAuth } from "@/contexts/AuthContext";
 import { usePools, useReports, useInvoices, useMileage } from "@/hooks/useData";
-import { MapPin, AlertTriangle, DollarSign, Car, Waves, CheckCircle2, Clock } from "lucide-react";
+import { MapPin, AlertTriangle, DollarSign, Car, Waves, CheckCircle2, Clock, PartyPopper } from "lucide-react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 
 const DAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 
 export default function DashboardPage() {
   const { user, company } = useAuth();
+  const searchParams = useSearchParams();
+  const [showSubBanner, setShowSubBanner] = useState(false);
+
+  useEffect(() => {
+    if (searchParams.get("subscribed") === "true") {
+      setShowSubBanner(true);
+      // Clear the param from URL without navigation
+      window.history.replaceState({}, "", "/dashboard");
+      setTimeout(() => setShowSubBanner(false), 8000);
+    }
+  }, [searchParams]);
   const { data: poolsData } = usePools();
   const { data: reportsData } = useReports();
   const { data: invoicesData } = useInvoices();
@@ -71,6 +84,15 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {showSubBanner && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <PartyPopper className="w-4 h-4 text-emerald-600" />
+            <p className="text-sm font-semibold text-emerald-800">Welcome to PoolPal AI! Your subscription is active.</p>
+          </div>
+          <button onClick={() => setShowSubBanner(false)} className="text-emerald-500 text-lg leading-none px-1">×</button>
+        </div>
+      )}
       <div>
         <h1 className="text-2xl font-bold text-slate-900">{greeting}, {name} 👋</h1>
         <p className="text-slate-500 text-sm mt-1">
