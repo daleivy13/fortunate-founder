@@ -7,7 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   LayoutDashboard, Waves, FlaskConical, MapPin,
   FileText, Users, Receipt, BarChart3, LogOut,
-  Settings, Bell, ChevronRight, Menu, X, Package, Upload, Gift,
+  Settings, Bell, ChevronRight, Menu, X, Package, Upload, Gift, Wrench,
 } from "lucide-react";
 
 const NAV = [
@@ -100,6 +100,12 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
           <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-all cursor-pointer">
             <Settings className="w-4 h-4 text-slate-400" />
             Settings
+          </div>
+        </Link>
+        <Link href="/setup" onClick={onClose}>
+          <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-all cursor-pointer">
+            <Wrench className="w-4 h-4 text-slate-400" />
+            App Setup
           </div>
         </Link>
         <button

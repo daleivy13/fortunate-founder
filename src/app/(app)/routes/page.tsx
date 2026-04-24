@@ -59,14 +59,20 @@ export default function SmartRoutesPage() {
     }
   }, [poolsData]);
 
-  // Fetch weather intelligence
+  // Fetch weather intelligence using browser geolocation
   useEffect(() => {
-    fetch("/api/weather")
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.temp) setWeather(d);
-      })
-      .catch(() => {});
+    const fetchWeather = (lat: number, lng: number) => {
+      fetch(`/api/weather?lat=${lat}&lng=${lng}`)
+        .then((r) => r.json())
+        .then((d) => { if (d.weather?.temp) setWeather(d.weather); })
+        .catch(() => {});
+    };
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => fetchWeather(pos.coords.latitude, pos.coords.longitude),
+        () => {} // user denied or unavailable — skip weather silently
+      );
+    }
   }, []);
 
   const done     = stops.filter((s) => s.status === "complete").length;
