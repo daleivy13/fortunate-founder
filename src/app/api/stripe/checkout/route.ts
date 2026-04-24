@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2024-04-10" });
-
 const PRICE_MAP: Record<string, Record<string, string>> = {
   solo:       { USD: process.env.STRIPE_PRICE_SOLO_USD   || process.env.STRIPE_PRICE_SMALL  || "", GBP: process.env.STRIPE_PRICE_SOLO_GBP   || "", EUR: process.env.STRIPE_PRICE_SOLO_EUR   || "", AUD: process.env.STRIPE_PRICE_SOLO_AUD   || "" },
   growth:     { USD: process.env.STRIPE_PRICE_GROWTH_USD || process.env.STRIPE_PRICE_MEDIUM || "", GBP: process.env.STRIPE_PRICE_GROWTH_GBP || "", EUR: process.env.STRIPE_PRICE_GROWTH_EUR || "", AUD: process.env.STRIPE_PRICE_GROWTH_AUD || "" },
@@ -23,6 +21,12 @@ const PRICE_MAP: Record<string, Record<string, string>> = {
 const REVOLUT_LOCALES = ["en-GB","fr-FR","de-DE","it-IT","es-ES","pt-PT","nl-NL","pl-PL","sv-SE","da-DK","fi-FI","nb-NO"];
 
 export async function POST(req: NextRequest) {
+  if (!process.env.STRIPE_SECRET_KEY) {
+    return NextResponse.json({ error: "Stripe not configured. Add STRIPE_SECRET_KEY to environment." }, { status: 503 });
+  }
+
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2024-04-10" });
+
   const { requireAuth } = await import("@/lib/auth");
   const { auth, error } = await requireAuth(req);
   if (error) return error;
