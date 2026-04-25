@@ -36,7 +36,7 @@ export default function ChemistryPage() {
     {key:"volumeGallons",label:t("chemistry.poolVolume"),unit:units.volume.abbr,target:"",step:"500"},
   ];
 
-  const getAI=async()=>{startTransition(async()=>{try{const res=await fetch("/api/chemistry/analyze",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...vals,locale:config.locale,unitSystem:config.unitSystem})});const data=await res.json();setAiAnalysis(data.analysis);}catch{setAiAnalysis("Add ANTHROPIC_API_KEY to .env.local to enable AI.");}});};
+  const getAI=async()=>{startTransition(async()=>{if(!navigator.onLine){setAiAnalysis("You're offline — AI analysis requires an internet connection. The dosage calculator above works offline.");return;}try{const res=await fetch("/api/chemistry/analyze",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...vals,locale:config.locale,unitSystem:config.unitSystem})});const data=await res.json();setAiAnalysis(data.analysis);}catch{setAiAnalysis("Add ANTHROPIC_API_KEY to .env.local to enable AI.");}});};
 
   const formatDose=(d:Dosage)=>d.flOz!==null?displaySmallDose(d.flOz):d.lbs!==null?displayLargeDose(d.lbs):"—";
 

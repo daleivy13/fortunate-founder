@@ -27,6 +27,7 @@ const UpdateWOSchema = z.object({
   completedAt: z.string().optional(),
   priority:    z.enum(["low","normal","high","urgent"]).optional(),
   assignedTo:  z.string().optional(),
+  invoiceId:   z.number().int().positive().optional(),
 });
 
 export async function GET(req: NextRequest) {
@@ -128,7 +129,8 @@ export async function PATCH(req: NextRequest) {
       tech_notes   = COALESCE(${rest.techNotes ?? null}, tech_notes),
       assigned_to  = COALESCE(${rest.assignedTo ?? null}, assigned_to),
       photos       = COALESCE(${photos ? JSON.stringify(photos) : null}, photos),
-      completed_at = COALESCE(${rest.completedAt ? new Date(rest.completedAt).toISOString() : null}::timestamp, completed_at)
+      completed_at = COALESCE(${rest.completedAt ? new Date(rest.completedAt).toISOString() : null}::timestamp, completed_at),
+      invoice_id   = COALESCE(${rest.invoiceId ?? null}, invoice_id)
     WHERE id = ${id}
     RETURNING *
   `);

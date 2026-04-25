@@ -21,6 +21,7 @@ export default function InvoicesPage() {
   const updateInvoice = useUpdateInvoice();
   const searchParams = useSearchParams();
   const woPreset = searchParams.get("wo") ? {
+    woId:       parseInt(searchParams.get("wo") ?? "0"),
     poolId:     searchParams.get("pool") ?? "",
     clientName: searchParams.get("client") ?? "",
     amount:     searchParams.get("amount") ?? "",
@@ -56,7 +57,7 @@ export default function InvoicesPage() {
 
   const markPaid = (id: number) => updateInvoice.mutate({ id, action: "mark_paid" });
 
-  if (showNew) return <NewInvoiceForm onBack={() => setShowNew(false)} onDone={() => setShowNew(false)} preset={woPreset} />;
+  if (showNew) return <NewInvoiceForm onBack={() => setShowNew(false)} onDone={() => setShowNew(false)} preset={woPreset ?? null} />;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -231,7 +232,7 @@ export default function InvoicesPage() {
   );
 }
 
-function NewInvoiceForm({ onBack, onDone, preset }: { onBack: () => void; onDone: () => void; preset?: { poolId: string; clientName: string; amount: string; title: string } | null }) {
+function NewInvoiceForm({ onBack, onDone, preset }: { onBack: () => void; onDone: () => void; preset?: { woId?: number; poolId: string; clientName: string; amount: string; title: string } | null }) {
   const { company } = useAuth();
   const { data: poolsData } = usePools();
   const createInvoice = useCreateInvoice();
@@ -278,6 +279,14 @@ function NewInvoiceForm({ onBack, onDone, preset }: { onBack: () => void; onDone
           headers: { "Content-Type": "application/json" },
           body:    JSON.stringify({ status: "sent", sendEmail: true }),
         });
+      }
+
+      if (preset?.woId && inv.invoice?.id) {
+        fetch("/api/work-orders", {
+          method:  "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ id: preset.woId, invoiceId: inv.invoice.id }),
+        }).catch(() => {});
       }
 
       onDone();
