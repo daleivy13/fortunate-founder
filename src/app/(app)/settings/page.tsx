@@ -97,6 +97,9 @@ export default function SettingsPage() {
   const [smsMessage, setSmsMessage] = useState("");
   const [smsSending, setSmsSending] = useState(false);
   const [smsResult, setSmsResult] = useState<{ sent: number; total: number } | null>(null);
+  const [recurringRunning, setRecurringRunning] = useState(false);
+  const [recurringResult, setRecurringResult] = useState<{ created: number; skipped: number; month: string } | null>(null);
+  const [recurringDryRun, setRecurringDryRun] = useState(false);
   const [loading, setLoading] = useState<string | null>(null);
   const [annual, setAnnual] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
@@ -357,6 +360,79 @@ export default function SettingsPage() {
             <p className="text-xs text-slate-400 mt-3">
               Requires QUICKBOOKS_CLIENT_ID and QUICKBOOKS_CLIENT_SECRET in your environment. See .env.example.
             </p>
+          </div>
+
+          {/* Recurring Invoices */}
+          <div className="card p-6 space-y-4">
+            <div>
+              <h2 className="font-bold text-slate-900 text-lg flex items-center gap-2">
+                <span className="text-xl">🔁</span> Monthly Invoice Auto-Generation
+              </h2>
+              <p className="text-slate-500 text-sm mt-1">
+                Create draft invoices for every active pool with a monthly rate — one click, all clients billed.
+              </p>
+            </div>
+
+            <div className="bg-slate-50 rounded-xl p-4 space-y-2 text-sm text-slate-600">
+              {[
+                "Creates one draft invoice per pool using the pool's monthly rate",
+                "Skips pools already invoiced this calendar month",
+                "Due date auto-set to the 1st of next month",
+                "Dry-run mode lets you preview before committing",
+              ].map(f => (
+                <div key={f} className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                    <span className="text-emerald-600 text-[10px]">✓</span>
+                  </div>
+                  {f}
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="dryRun"
+                checked={recurringDryRun}
+                onChange={e => setRecurringDryRun(e.target.checked)}
+                className="rounded"
+              />
+              <label htmlFor="dryRun" className="text-sm text-slate-600">Dry run (preview only — no invoices created)</label>
+            </div>
+
+            {recurringResult && (
+              <div className={`rounded-xl px-4 py-3 text-sm ${recurringDryRun ? "bg-blue-50 border border-blue-200 text-blue-800" : "bg-emerald-50 border border-emerald-200 text-emerald-800"}`}>
+                {recurringDryRun ? "Preview: " : "Done — "}
+                <strong>{recurringResult.created} invoices</strong> would be created for {recurringResult.month}.
+                {recurringResult.skipped > 0 && ` ${recurringResult.skipped} pool${recurringResult.skipped !== 1 ? "s" : ""} skipped (already invoiced).`}
+              </div>
+            )}
+
+            <button
+              disabled={recurringRunning || !company}
+              onClick={async () => {
+                if (!company) return;
+                setRecurringRunning(true);
+                setRecurringResult(null);
+                try {
+                  const res = await fetch("/api/invoices/recurring", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ companyId: company.id, dryRun: recurringDryRun }),
+                  });
+                  const d = await res.json();
+                  if (res.ok) setRecurringResult({ created: d.total, skipped: d.skipped.length, month: d.month });
+                  else alert(d.error ?? "Failed");
+                } catch { alert("Failed to run"); }
+                setRecurringRunning(false);
+              }}
+              className="btn-primary w-full"
+            >
+              {recurringRunning
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> Running…</>
+                : recurringDryRun ? "Preview Monthly Invoices" : "Generate Monthly Invoices"}
+            </button>
+            <p className="text-xs text-slate-400">Invoices are created as drafts. Go to Invoices to review and send them.</p>
           </div>
 
           {/* Bulk SMS */}

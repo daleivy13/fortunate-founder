@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Navigation, CheckCircle2, Clock, Car, Thermometer, Droplets, Wind, Sun, ChevronDown, ChevronUp, ClipboardList, Zap, Loader2, GripVertical, ArrowUp, ArrowDown } from "lucide-react";
+import { Navigation, CheckCircle2, Clock, Car, Thermometer, Droplets, Wind, Sun, ChevronDown, ChevronUp, ClipboardList, Zap, Loader2, GripVertical, ArrowUp, ArrowDown, MessageSquare } from "lucide-react";
 import { useGPS } from "@/hooks/useGPS";
 import { usePools } from "@/hooks/useData";
 import { useAuth } from "@/contexts/AuthContext";
@@ -48,6 +48,8 @@ export default function SmartRoutesPage() {
   const [stops,        setStops]       = useState<any[]>([]);
   const [sessionMiles, setSessionMiles] = useState(0);
   const [weather,      setWeather]     = useState<any>(null);
+  const [omwSending,   setOmwSending]  = useState<number | null>(null);
+  const [omwSent,      setOmwSent]     = useState<Set<number>>(new Set());
 
   // Build stops from real pools whenever pool data loads
   useEffect(() => {
@@ -97,6 +99,23 @@ export default function SmartRoutesPage() {
       return updated;
     });
     setExpanded(null);
+  };
+
+  const sendOmw = async (stop: any) => {
+    if (!stop.pool.clientPhone) return;
+    setOmwSending(stop.id);
+    try {
+      await fetch("/api/sms", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: stop.pool.clientPhone,
+          message: `Hi ${stop.pool.clientName?.split(" ")[0] ?? "there"}, your pool tech is on the way! Expected arrival in ~15 minutes. — PoolPal AI`,
+        }),
+      });
+      setOmwSent(prev => new Set([...prev, stop.id]));
+    } catch { /* silent fail */ }
+    finally { setOmwSending(null); }
   };
 
   const completeTask = (stopId: number, taskId: number) => {
@@ -313,7 +332,7 @@ export default function SmartRoutesPage() {
                       <p className="text-xs text-blue-900">{stop.pool.notes}</p>
                     </div>
                   )}
-                  <div className="p-4 flex gap-2">
+                  <div className="p-4 flex flex-wrap gap-2">
                     <a
                       href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(stop.pool.address)}`}
                       target="_blank"
@@ -323,7 +342,24 @@ export default function SmartRoutesPage() {
                       Navigate
                     </a>
                     {stop.pool.clientPhone && (
-                      <a href={`tel:${stop.pool.clientPhone}`} className="btn-outline flex-1 text-xs py-2 text-center no-underline">Call</a>
+                      <>
+                        <a href={`tel:${stop.pool.clientPhone}`} className="btn-outline text-xs py-2 px-3 text-center no-underline">Call</a>
+                        <button
+                          onClick={() => sendOmw(stop)}
+                          disabled={omwSending === stop.id || omwSent.has(stop.id)}
+                          className={`text-xs py-2 px-3 rounded-xl font-semibold border transition-all flex items-center gap-1 ${
+                            omwSent.has(stop.id)
+                              ? "bg-emerald-50 border-emerald-300 text-emerald-700"
+                              : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                          }`}
+                        >
+                          {omwSending === stop.id
+                            ? <Loader2 className="w-3 h-3 animate-spin" />
+                            : omwSent.has(stop.id)
+                            ? "✓ Sent"
+                            : <><MessageSquare className="w-3 h-3" /> On My Way</>}
+                        </button>
+                      </>
                     )}
                     <Link href={`/reports?pool=${stop.pool.id}`}>
                       <button className="btn-primary text-xs py-2 px-4">+ Report</button>

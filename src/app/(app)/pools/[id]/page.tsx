@@ -9,6 +9,9 @@ import {
   Wrench, Plus, Trash2, Zap, Thermometer, Droplets, Wind,
   Power, Settings2, Camera, X, Loader2, ClipboardList, RefreshCw,
 } from "lucide-react";
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
+} from "recharts";
 import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { useState, useRef } from "react";
@@ -702,36 +705,50 @@ export default function PoolDetailPage() {
               )}
             </div>
 
-            {/* Chemistry history */}
+            {/* Chemistry trend charts */}
             {readings?.length > 1 && (
               <div className="card p-5">
-                <h2 className="font-bold text-slate-900 mb-4">Reading History</h2>
-                <div className="space-y-2">
-                  {readings.map((r: any, i: number) => (
-                    <div key={r.id} className={`flex items-center gap-3 py-2.5 border-b border-slate-100 last:border-0 ${i === 0 ? "opacity-100" : "opacity-70"}`}>
-                      <div className="text-xs text-slate-400 w-28 flex-shrink-0">
-                        {new Date(r.recordedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                      </div>
-                      {[
-                        { label: "Cl", val: r.freeChlorine, min: 1, max: 4 },
-                        { label: "pH", val: r.ph, min: 7.2, max: 7.6 },
-                        { label: "TA", val: r.totalAlkalinity, min: 80, max: 120 },
-                      ].map((m) => m.val !== null && (
-                        <div key={m.label} className="text-xs">
-                          <span className="text-slate-400">{m.label}: </span>
-                          <span className={m.val >= m.min && m.val <= m.max ? "text-emerald-600 font-semibold" : "text-red-600 font-semibold"}>
-                            {m.val}
-                          </span>
+                <h2 className="font-bold text-slate-900 mb-4">Chemistry Trends</h2>
+                {(() => {
+                  const chartData = [...readings].reverse().slice(-12).map((r: any) => ({
+                    date: new Date(r.recordedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+                    cl:   r.freeChlorine   !== null ? parseFloat(r.freeChlorine)   : undefined,
+                    ph:   r.ph             !== null ? parseFloat(r.ph)             : undefined,
+                    ta:   r.totalAlkalinity !== null ? parseFloat(r.totalAlkalinity) : undefined,
+                  }));
+                  const charts = [
+                    { key: "cl", label: "Free Chlorine (ppm)", color: "#0ea5e9", min: 1,  max: 4,   domainMin: 0,  domainMax: 6   },
+                    { key: "ph", label: "pH",                  color: "#8b5cf6", min: 7.2, max: 7.6, domainMin: 6.5,domainMax: 8.5 },
+                    { key: "ta", label: "Total Alkalinity",    color: "#f59e0b", min: 80,  max: 120,  domainMin: 40, domainMax: 200 },
+                  ].filter(c => chartData.some(d => (d as any)[c.key] !== undefined));
+                  return (
+                    <div className="space-y-5">
+                      {charts.map(c => (
+                        <div key={c.key}>
+                          <p className="text-xs font-semibold text-slate-500 mb-2">{c.label}</p>
+                          <ResponsiveContainer width="100%" height={110}>
+                            <LineChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: -20 }}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                              <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#94a3b8" }} />
+                              <YAxis domain={[c.domainMin, c.domainMax]} tick={{ fontSize: 10, fill: "#94a3b8" }} />
+                              <Tooltip
+                                contentStyle={{ fontSize: 11, borderRadius: 8, border: "1px solid #e2e8f0" }}
+                                formatter={(v: any) => [v, c.label]}
+                              />
+                              <ReferenceLine y={c.min} stroke="#22c55e" strokeDasharray="4 2" strokeWidth={1} />
+                              <ReferenceLine y={c.max} stroke="#22c55e" strokeDasharray="4 2" strokeWidth={1} />
+                              <Line
+                                type="monotone" dataKey={c.key} stroke={c.color}
+                                strokeWidth={2} dot={{ r: 3, fill: c.color }} connectNulls
+                              />
+                            </LineChart>
+                          </ResponsiveContainer>
+                          <p className="text-[10px] text-slate-400 mt-0.5">Target range: {c.min}–{c.max} (dashed lines)</p>
                         </div>
                       ))}
-                      {r.chemicalsUsed && (
-                        <div className="ml-auto text-xs text-slate-400 italic truncate max-w-[120px]" title={r.chemicalsUsed}>
-                          + {r.chemicalsUsed}
-                        </div>
-                      )}
                     </div>
-                  ))}
-                </div>
+                  );
+                })()}
               </div>
             )}
 
