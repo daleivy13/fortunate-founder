@@ -24,14 +24,14 @@ export async function GET(
       .from(chemistryReadings)
       .where(eq(chemistryReadings.poolId, id))
       .orderBy(desc(chemistryReadings.recordedAt))
-      .limit(10);
+      .limit(24); // 24 readings for trend charts (~6 months weekly)
 
     const reports = await db
       .select()
       .from(serviceReports)
       .where(eq(serviceReports.poolId, id))
       .orderBy(desc(serviceReports.servicedAt))
-      .limit(10);
+      .limit(20);
 
     return NextResponse.json({ pool, readings, reports });
   } catch (err: any) {
