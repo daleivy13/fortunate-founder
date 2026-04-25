@@ -2,9 +2,10 @@
 
 import { useState, useRef } from "react";
 import { useSearchParams } from "next/navigation";
-import { FileText, Plus, CheckCircle2, Send, Download, Camera, Loader2, ArrowLeft, X } from "lucide-react";
+import { FileText, Plus, CheckCircle2, Send, Download, Camera, Loader2, ArrowLeft, X, WifiOff } from "lucide-react";
 import { useReports, useCreateReport, usePools } from "@/hooks/useData";
 import Link from "next/link";
+import { enqueue } from "@/lib/offlineQueue";
 
 const CHECKS_LABELS = [
   { key: "skimmed",          label: "Skimmed" },
@@ -196,6 +197,7 @@ function NewReportForm({ onBack, defaultPoolId }: { onBack: () => void; defaultP
   const [photos,  setPhotos]  = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [done,    setDone]    = useState(false);
+  const [queued,  setQueued]  = useState(false);
   const [reportId, setReportId] = useState<number | null>(null);
   const [error,   setError]   = useState("");
 
@@ -235,31 +237,58 @@ function NewReportForm({ onBack, defaultPoolId }: { onBack: () => void; defaultP
   const handleSubmit = async () => {
     if (!poolId) { setError("Please select a pool"); return; }
     setError("");
-    try {
-      const chemicalsUsedStr = dosages
-        .filter(d => d.chemical && d.amount)
-        .map(d => `${d.amount}${d.unit} ${d.chemical}`)
-        .join(", ");
 
-      const res = await createReport({
-        poolId,
-        freeChlorine:    cl    || null,
-        ph:              ph    || null,
-        totalAlkalinity: ta    || null,
-        waterTemp:       temp  || null,
-        ...checks,
-        chemicalsAdded:  dosages.some(d => d.chemical && d.amount) ? true : checks.chemicalsAdded,
-        chemicalsUsed:   chemicalsUsedStr || null,
-        issuesFound:     issues || null,
-        techNotes:       notes  || null,
-        photos:          photos.length > 0 ? photos : null,
+    const chemicalsUsedStr = dosages
+      .filter(d => d.chemical && d.amount)
+      .map(d => `${d.amount}${d.unit} ${d.chemical}`)
+      .join(", ");
+
+    const payload = {
+      poolId,
+      freeChlorine:    cl    || null,
+      ph:              ph    || null,
+      totalAlkalinity: ta    || null,
+      waterTemp:       temp  || null,
+      ...checks,
+      chemicalsAdded:  dosages.some(d => d.chemical && d.amount) ? true : checks.chemicalsAdded,
+      chemicalsUsed:   chemicalsUsedStr || null,
+      issuesFound:     issues || null,
+      techNotes:       notes  || null,
+      photos:          photos.length > 0 ? photos : null,
+    };
+
+    if (!navigator.onLine) {
+      await enqueue({
+        url: "/api/reports",
+        method: "POST",
+        body: JSON.stringify(payload),
+        label: `Service report for pool #${poolId}`,
       });
+      setQueued(true);
+      return;
+    }
+
+    try {
+      const res = await createReport(payload);
       setReportId(res.report.id);
       setDone(true);
     } catch (e: any) {
       setError(e.message ?? "Failed to save report");
     }
   };
+
+  if (queued) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-96 gap-4 animate-fade-in">
+        <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center">
+          <WifiOff className="w-8 h-8 text-amber-500" />
+        </div>
+        <h2 className="text-xl font-bold text-slate-900">Saved Offline</h2>
+        <p className="text-slate-500 text-sm text-center max-w-xs">Report queued locally. It will automatically sync when you reconnect to the internet.</p>
+        <button onClick={onBack} className="btn-outline">Back to Reports</button>
+      </div>
+    );
+  }
 
   if (done) {
     return (

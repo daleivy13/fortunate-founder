@@ -6,8 +6,9 @@ import { usePools, useEmployees } from "@/hooks/useData";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Wrench, Plus, X, Loader2, CheckCircle2, Clock, AlertTriangle,
-  Zap, ChevronDown, ChevronUp, Camera, DollarSign, User, Calendar,
+  Zap, ChevronDown, ChevronUp, Camera, DollarSign, User, Calendar, WifiOff,
 } from "lucide-react";
+import { enqueue } from "@/lib/offlineQueue";
 
 const PRIORITIES = [
   { value: "urgent",  label: "Urgent",  color: "bg-red-100 text-red-700 border-red-300"     },
@@ -118,8 +119,14 @@ export default function WorkOrdersPage() {
     } catch (e: any) { setFormError(e.message); }
   };
 
-  const updateStatus = (id: number, status: string) =>
-    updateWO.mutate({ id, status, ...(status === "complete" ? { completedAt: new Date().toISOString() } : {}) });
+  const updateStatus = async (id: number, status: string) => {
+    const payload = { id, status, ...(status === "complete" ? { completedAt: new Date().toISOString() } : {}) };
+    if (!navigator.onLine) {
+      await enqueue({ url: "/api/work-orders", method: "PATCH", body: JSON.stringify(payload), label: `Work order #${id} → ${status}` });
+      return;
+    }
+    updateWO.mutate(payload);
+  };
 
   const filtered = workOrders.filter(wo =>
     filter === "all" ? wo.status !== "cancelled" : wo.status === filter

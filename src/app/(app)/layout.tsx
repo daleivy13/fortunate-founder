@@ -9,6 +9,7 @@ import {
   FileText, Users, Receipt, BarChart3, LogOut,
   Settings, Bell, ChevronRight, Menu, X, Package, Upload, Gift, Wrench,
 } from "lucide-react";
+import OfflineBanner from "@/components/OfflineBanner";
 
 const NAV = [
   { href: "/dashboard",  label: "Dashboard",   icon: LayoutDashboard, group: "main" },
@@ -203,6 +204,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <div className="flex-1 p-4 lg:p-6 max-w-7xl mx-auto w-full">
           {children}
         </div>
+        <OfflineBanner />
       </main>
     </div>
   );
