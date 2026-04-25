@@ -2,7 +2,8 @@
 
 import { useAuth } from "@/contexts/AuthContext";
 import { usePools, useReports, useInvoices, useMileage } from "@/hooks/useData";
-import { MapPin, AlertTriangle, DollarSign, Car, Waves, CheckCircle2, Clock, PartyPopper } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { MapPin, AlertTriangle, DollarSign, Car, Waves, CheckCircle2, Clock, PartyPopper, Wrench } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -26,6 +27,14 @@ export default function DashboardPage() {
   const { data: reportsData } = useReports();
   const { data: invoicesData } = useInvoices();
   const { data: mileageData } = useMileage();
+  const { data: woData } = useQuery({
+    queryKey: ["work-orders", company?.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/work-orders?companyId=${company!.id}`);
+      return res.json() as Promise<{ workOrders: any[] }>;
+    },
+    enabled: !!company?.id,
+  });
 
   const name = user?.displayName?.split(" ")[0] ?? "there";
   const hour = new Date().getHours();
@@ -66,6 +75,19 @@ export default function DashboardPage() {
   if (dueInvoice) {
     chemAlerts.push({ pool: dueInvoice.clientName, msg: "Invoice awaiting payment", href: "/invoices" });
   }
+
+  const workOrders: any[] = woData?.workOrders ?? [];
+  const openWOs   = workOrders.filter(w => w.status === "pending" || w.status === "in_progress").length;
+  const urgentWOs = workOrders.filter(w => w.priority === "urgent" && w.status !== "complete" && w.status !== "cancelled").length;
+  if (urgentWOs > 0) {
+    chemAlerts.push({ pool: `${urgentWOs} urgent work order${urgentWOs !== 1 ? "s" : ""}`, msg: "Needs immediate attention", href: "/work-orders" });
+  }
+
+  // Invoice aging
+  const now30  = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const now60  = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
+  const overdue30 = invoices.filter((i: any) => i.status === "overdue" && new Date(i.createdAt) > now60 && new Date(i.createdAt) < now30).length;
+  const overdue60 = invoices.filter((i: any) => i.status === "overdue" && new Date(i.createdAt) < now60).length;
 
   const STATS = [
     { label: "Today's Stops",   value: todayStops > 0 ? todayStops.toString() : pools.length > 0 ? pools.length.toString() : "—", sub: todayStops > 0 ? `${todayStops} scheduled today` : "Set service days on pools", icon: MapPin,     color: "text-pool-600",    bg: "bg-pool-50" },
@@ -228,6 +250,55 @@ export default function DashboardPage() {
               ))}
             </div>
           </div>
+
+          {/* Work Orders widget */}
+          {openWOs > 0 && (
+            <Link href="/work-orders">
+              <div className="card p-5 hover:border-pool-300 transition-colors cursor-pointer">
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="section-title flex items-center gap-2">
+                    <Wrench className="w-4 h-4 text-pool-600" /> Work Orders
+                  </h2>
+                  <span className="text-xs text-pool-600 font-medium">View all →</span>
+                </div>
+                <div className="flex gap-3">
+                  <div className="flex-1 text-center bg-amber-50 rounded-xl py-2.5">
+                    <p className="text-lg font-bold text-amber-700">{openWOs}</p>
+                    <p className="text-xs text-slate-400">Open</p>
+                  </div>
+                  {urgentWOs > 0 && (
+                    <div className="flex-1 text-center bg-red-50 rounded-xl py-2.5">
+                      <p className="text-lg font-bold text-red-600">{urgentWOs}</p>
+                      <p className="text-xs text-slate-400">Urgent</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </Link>
+          )}
+
+          {/* AR Aging */}
+          {(overdue30 > 0 || overdue60 > 0) && (
+            <Link href="/invoices">
+              <div className="card p-5 hover:border-red-200 transition-colors cursor-pointer">
+                <h2 className="section-title mb-3 text-red-600">Overdue Invoices</h2>
+                <div className="space-y-2">
+                  {overdue30 > 0 && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-slate-500">30–60 days</span>
+                      <span className="font-bold text-amber-600">{overdue30} invoice{overdue30 !== 1 ? "s" : ""}</span>
+                    </div>
+                  )}
+                  {overdue60 > 0 && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-slate-500">60+ days</span>
+                      <span className="font-bold text-red-600">{overdue60} invoice{overdue60 !== 1 ? "s" : ""}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </Link>
+          )}
         </div>
       </div>
     </div>

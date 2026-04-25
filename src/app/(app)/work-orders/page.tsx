@@ -6,7 +6,7 @@ import { usePools, useEmployees } from "@/hooks/useData";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Wrench, Plus, X, Loader2, CheckCircle2, Clock, AlertTriangle,
-  Zap, ChevronDown, ChevronUp, Camera, DollarSign, User, Calendar, WifiOff,
+  Zap, ChevronDown, ChevronUp, DollarSign, User, Calendar, WifiOff,
 } from "lucide-react";
 import { enqueue } from "@/lib/offlineQueue";
 
@@ -309,24 +309,34 @@ export default function WorkOrdersPage() {
                     )}
 
                     {/* Actions */}
-                    {wo.status !== "complete" && wo.status !== "cancelled" && (
-                      <div className="flex gap-2 flex-wrap">
-                        {wo.status === "pending" && (
-                          <button onClick={() => updateStatus(wo.id, "in_progress")} className="btn-secondary text-sm flex items-center gap-1.5">
-                            <Zap className="w-3.5 h-3.5" /> Start Work
+                    <div className="flex gap-2 flex-wrap">
+                      {wo.status !== "complete" && wo.status !== "cancelled" && (
+                        <>
+                          {wo.status === "pending" && (
+                            <button onClick={() => updateStatus(wo.id, "in_progress")} className="btn-secondary text-sm flex items-center gap-1.5">
+                              <Zap className="w-3.5 h-3.5" /> Start Work
+                            </button>
+                          )}
+                          {(wo.status === "pending" || wo.status === "in_progress") && (
+                            <button onClick={() => updateStatus(wo.id, "complete")} className="btn-primary text-sm flex items-center gap-1.5">
+                              <CheckCircle2 className="w-3.5 h-3.5" /> Mark Complete
+                            </button>
+                          )}
+                          <button onClick={() => updateStatus(wo.id, "cancelled")}
+                            className="text-sm text-red-500 hover:text-red-700 px-3 py-2">
+                            Cancel
                           </button>
-                        )}
-                        {(wo.status === "pending" || wo.status === "in_progress") && (
-                          <button onClick={() => updateStatus(wo.id, "complete")} className="btn-primary text-sm flex items-center gap-1.5">
-                            <CheckCircle2 className="w-3.5 h-3.5" /> Mark Complete
-                          </button>
-                        )}
-                        <button onClick={() => updateStatus(wo.id, "cancelled")}
-                          className="text-sm text-red-500 hover:text-red-700 px-3 py-2">
-                          Cancel
-                        </button>
-                      </div>
-                    )}
+                        </>
+                      )}
+                      {wo.status === "complete" && !wo.invoiceId && (
+                        <a
+                          href={`/invoices?wo=${wo.id}&pool=${wo.pool_id}&client=${encodeURIComponent(wo.client_name ?? "")}&amount=${wo.actual_cost ?? wo.estimated_cost ?? ""}&title=${encodeURIComponent(wo.title)}`}
+                          className="btn-secondary text-sm flex items-center gap-1.5"
+                        >
+                          <DollarSign className="w-3.5 h-3.5" /> Create Invoice
+                        </a>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>

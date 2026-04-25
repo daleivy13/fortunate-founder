@@ -100,6 +100,9 @@ export default function SettingsPage() {
   const [recurringRunning, setRecurringRunning] = useState(false);
   const [recurringResult, setRecurringResult] = useState<{ created: number; skipped: number; month: string } | null>(null);
   const [recurringDryRun, setRecurringDryRun] = useState(false);
+  const [reminderRunning, setReminderRunning] = useState(false);
+  const [reminderResult, setReminderResult]   = useState<{ sent: number; total: number; day: string } | null>(null);
+  const [reminderDryRun, setReminderDryRun]   = useState(false);
   const [loading, setLoading] = useState<string | null>(null);
   const [annual, setAnnual] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
@@ -500,6 +503,59 @@ export default function SettingsPage() {
               {smsSending ? "Sending…" : `Send SMS to ${smsSegment === "all" ? "All" : smsSegment.charAt(0).toUpperCase()+smsSegment.slice(1)} Clients`}
             </button>
             <p className="text-xs text-slate-400">Requires TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER in your environment.</p>
+          </div>
+
+          {/* Service Reminders */}
+          <div className="card p-6 space-y-4">
+            <div>
+              <h2 className="font-bold text-slate-900 text-lg flex items-center gap-2">
+                <span className="text-xl">⏰</span> Service Day Reminders
+              </h2>
+              <p className="text-slate-500 text-sm mt-1">
+                Send a day-before SMS reminder to every client whose pool is scheduled for tomorrow.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="reminderDryRun"
+                checked={reminderDryRun}
+                onChange={e => setReminderDryRun(e.target.checked)}
+                className="rounded"
+              />
+              <label htmlFor="reminderDryRun" className="text-sm text-slate-600">Dry run (show who would be texted without sending)</label>
+            </div>
+            {reminderResult && (
+              <div className={`rounded-xl px-4 py-3 text-sm ${reminderDryRun ? "bg-blue-50 border border-blue-200 text-blue-800" : "bg-emerald-50 border border-emerald-200 text-emerald-800"}`}>
+                {reminderDryRun ? "Preview: " : "Sent — "}
+                <strong>{reminderResult.sent} of {reminderResult.total}</strong> clients with service on <strong>{reminderResult.day}</strong>
+              </div>
+            )}
+            <button
+              disabled={reminderRunning || !company}
+              onClick={async () => {
+                if (!company) return;
+                setReminderRunning(true);
+                setReminderResult(null);
+                try {
+                  const res = await fetch("/api/sms/reminders", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ companyId: company.id, dryRun: reminderDryRun }),
+                  });
+                  const d = await res.json();
+                  if (res.ok) setReminderResult({ sent: d.sent, total: d.total, day: d.day });
+                  else alert(d.error ?? "Failed");
+                } catch { alert("Failed"); }
+                setReminderRunning(false);
+              }}
+              className="btn-primary w-full"
+            >
+              {reminderRunning
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> Sending…</>
+                : reminderDryRun ? "Preview Tomorrow's Reminders" : "Send Tomorrow's Service Reminders"}
+            </button>
+            <p className="text-xs text-slate-400">Only texts pools with a service_day set and a client phone number. Requires Twilio.</p>
           </div>
 
           {/* Twilio / Resend status */}

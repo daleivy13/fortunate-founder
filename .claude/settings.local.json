@@ -8,7 +8,14 @@
       "Bash(git push *)",
       "Bash(npx drizzle-kit *)",
       "Bash(DATABASE_URL=\"postgresql://neondb_owner:npg_1tsdhep7HaBK@ep-shiny-water-amdtyesh.c-5.us-east-1.aws.neon.tech/neondb?sslmode=require\" npx drizzle-kit push)",
-      "Bash(node *)"
+      "Bash(node *)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\({**d.get\\('dependencies',{}\\), **d.get\\('devDependencies',{}\\)}, indent=2\\)\\)\")",
+      "Bash(npm install *)",
+      "Bash(npx tsc *)",
+      "Bash(awk -F\"'\" '{print $2}')",
+      "Bash(grep -rn \"fetch\\\\\\(\\\\`/api\\\\|fetch\\('/api\\\\|fetch\\(\\\\\"/api\" src/app/\\\\\\(app\\\\\\) --include=\"*.tsx\")",
+      "Bash(grep -oP \"\\(?<=fetch\\\\\\(\\)['\\\\`]/api[^'\\\\`\\\\\"]*\")",
+      "Bash([ -f \"src/app/$route/route.ts\" ])"
     ]
   }
 }

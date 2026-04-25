@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { Users, Plus, Phone, Mail, Star, Loader2, X } from "lucide-react";
 import { useEmployees, useCreateEmployee, useUpdateEmployee, useDeleteEmployee } from "@/hooks/useData";
+import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/contexts/AuthContext";
 
 const AVATAR_COLORS = [
   "from-pool-500 to-[#00c3e3]",
@@ -20,13 +22,26 @@ function initials(name: string) {
 interface EmpForm { name: string; role: string; email: string; phone: string; hourlyRate: string; }
 
 export default function EmployeesPage() {
+  const { company } = useAuth();
   const { data, isLoading } = useEmployees();
   const { mutateAsync: createEmployee, isPending } = useCreateEmployee();
   const updateEmployee = useUpdateEmployee();
   const deleteEmployee = useDeleteEmployee();
+  const { data: ratingsData } = useQuery({
+    queryKey: ["ratings", company?.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/ratings?companyId=${company!.id}`);
+      return res.json();
+    },
+    enabled: !!company?.id,
+  });
 
   const employees: any[] = data?.employees ?? [];
   const active = employees.filter((e) => e.isActive !== false);
+  const ratingsByTech: Record<string, any> = {};
+  for (const stat of (ratingsData?.techStats?.rows ?? [])) {
+    ratingsByTech[stat.tech_id] = stat;
+  }
 
   const [showNew,  setShowNew]  = useState(false);
   const [editing,  setEditing]  = useState<any | null>(null);
@@ -152,6 +167,19 @@ export default function EmployeesPage() {
                     </a>
                   )}
                 </div>
+
+                {(() => {
+                  const r = ratingsByTech[emp.userId];
+                  if (!r) return null;
+                  return (
+                    <div className="mt-2 flex items-center gap-1.5">
+                      {[1,2,3,4,5].map(n => (
+                        <Star key={n} className={`w-3.5 h-3.5 ${n <= Math.round(parseFloat(r.avg_rating)) ? "text-amber-400 fill-amber-400" : "text-slate-200 fill-slate-200"}`} />
+                      ))}
+                      <span className="text-xs text-slate-500 ml-1">{parseFloat(r.avg_rating).toFixed(1)} ({r.total_ratings} rating{r.total_ratings !== 1 ? "s" : ""})</span>
+                    </div>
+                  );
+                })()}
 
                 <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between">
                   <div>

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { Receipt, Plus, Send, DollarSign, Clock, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
 import { useInvoices, useCreateInvoice, useUpdateInvoice } from "@/hooks/useData";
 import { useAuth } from "@/contexts/AuthContext";
@@ -18,6 +19,17 @@ export default function InvoicesPage() {
   const [filter, setFilter] = useState<"all" | "unpaid" | "paid">("all");
   const { data, isLoading } = useInvoices();
   const updateInvoice = useUpdateInvoice();
+  const searchParams = useSearchParams();
+  const woPreset = searchParams.get("wo") ? {
+    poolId:     searchParams.get("pool") ?? "",
+    clientName: searchParams.get("client") ?? "",
+    amount:     searchParams.get("amount") ?? "",
+    title:      searchParams.get("title") ?? "",
+  } : null;
+
+  useEffect(() => {
+    if (woPreset) setShowNew(true);
+  }, []);
 
   const invoices = data?.invoices ?? [];
 
@@ -44,7 +56,7 @@ export default function InvoicesPage() {
 
   const markPaid = (id: number) => updateInvoice.mutate({ id, action: "mark_paid" });
 
-  if (showNew) return <NewInvoiceForm onBack={() => setShowNew(false)} onDone={() => setShowNew(false)} />;
+  if (showNew) return <NewInvoiceForm onBack={() => setShowNew(false)} onDone={() => setShowNew(false)} preset={woPreset} />;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -73,6 +85,36 @@ export default function InvoicesPage() {
           <p className="stat-value text-red-600">{overdue} invoice{overdue !== 1 ? "s" : ""}</p>
         </div>
       </div>
+
+      {/* AR Aging */}
+      {(() => {
+        const now = Date.now();
+        const aging = [
+          { label: "Current (0–30 days)", invoices: invoices.filter((i: any) => i.status === "sent" && (now - new Date(i.createdAt).getTime()) < 30*86400000) },
+          { label: "30–60 days",          invoices: invoices.filter((i: any) => (i.status === "sent"||i.status==="overdue") && (now - new Date(i.createdAt).getTime()) >= 30*86400000 && (now - new Date(i.createdAt).getTime()) < 60*86400000) },
+          { label: "60–90 days",          invoices: invoices.filter((i: any) => (i.status === "sent"||i.status==="overdue") && (now - new Date(i.createdAt).getTime()) >= 60*86400000 && (now - new Date(i.createdAt).getTime()) < 90*86400000) },
+          { label: "90+ days",            invoices: invoices.filter((i: any) => (i.status === "sent"||i.status==="overdue") && (now - new Date(i.createdAt).getTime()) >= 90*86400000) },
+        ].filter(a => a.invoices.length > 0);
+        if (aging.length === 0) return null;
+        return (
+          <div className="card p-5">
+            <h2 className="font-bold text-slate-900 mb-3">Accounts Receivable Aging</h2>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              {aging.map(a => {
+                const total = a.invoices.reduce((s: number, i: any) => s + parseFloat(i.amount ?? 0), 0);
+                const isOld = a.label.startsWith("60") || a.label.startsWith("90");
+                return (
+                  <div key={a.label} className={`rounded-xl p-3 border ${isOld ? "bg-red-50 border-red-200" : "bg-amber-50 border-amber-200"}`}>
+                    <p className="text-xs text-slate-500 mb-1">{a.label}</p>
+                    <p className={`text-lg font-bold ${isOld ? "text-red-700" : "text-amber-700"}`}>${total.toLocaleString()}</p>
+                    <p className="text-xs text-slate-400">{a.invoices.length} invoice{a.invoices.length !== 1 ? "s" : ""}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Stripe note */}
       <div className="bg-pool-50 border border-pool-200 rounded-xl p-4 flex items-start gap-3">
@@ -189,12 +231,16 @@ export default function InvoicesPage() {
   );
 }
 
-function NewInvoiceForm({ onBack, onDone }: { onBack: () => void; onDone: () => void }) {
+function NewInvoiceForm({ onBack, onDone, preset }: { onBack: () => void; onDone: () => void; preset?: { poolId: string; clientName: string; amount: string; title: string } | null }) {
   const { company } = useAuth();
   const { data: poolsData } = usePools();
   const createInvoice = useCreateInvoice();
-  const [items, setItems] = useState([{ desc: "Monthly pool service", qty: 1, rate: "" as string }]);
-  const [clientName, setClientName]   = useState("");
+  const [items, setItems] = useState(() =>
+    preset?.title && preset?.amount
+      ? [{ desc: preset.title, qty: 1, rate: preset.amount }]
+      : [{ desc: "Monthly pool service", qty: 1, rate: "" as string }]
+  );
+  const [clientName, setClientName]   = useState(preset?.clientName ?? "");
   const [clientEmail, setClientEmail] = useState("");
   const [dueDate, setDueDate]         = useState("");
   const [notes, setNotes]             = useState("");

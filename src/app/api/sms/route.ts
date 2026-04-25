@@ -64,10 +64,21 @@ export async function POST(req: NextRequest) {
   if (error) return error;
 
   try {
-    const { type, to, data } = await req.json();
+    const payload = await req.json();
+    const { to, message, type, data } = payload;
 
-    if (!to || !type) {
-      return NextResponse.json({ error: "to and type required" }, { status: 400 });
+    if (!to) {
+      return NextResponse.json({ error: "to required" }, { status: 400 });
+    }
+
+    // Direct free-form message (used by On My Way, etc.)
+    if (message) {
+      const sent = await sendSMS(to, message);
+      return NextResponse.json({ success: sent, body: message });
+    }
+
+    if (!type) {
+      return NextResponse.json({ error: "type or message required" }, { status: 400 });
     }
 
     let body = "";

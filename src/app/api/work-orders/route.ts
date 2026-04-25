@@ -76,7 +76,27 @@ export async function POST(req: NextRequest) {
     RETURNING *
   `);
 
-  return NextResponse.json({ workOrder: result.rows[0] }, { status: 201 });
+  const wo = result.rows[0] as any;
+
+  // Fire push notification to all company techs for urgent/high work orders
+  if (data.priority === "urgent" || data.priority === "high") {
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+      fetch(`${baseUrl}/api/push`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action:    "send",
+          companyId: data.companyId,
+          title:     `${data.priority === "urgent" ? "🚨" : "⚠️"} ${data.priority.toUpperCase()} Work Order`,
+          body:      data.title,
+          data:      { type: "work_order", id: wo.id },
+        }),
+      }).catch(() => {});
+    } catch {}
+  }
+
+  return NextResponse.json({ workOrder: wo }, { status: 201 });
 }
 
 export async function PATCH(req: NextRequest) {
