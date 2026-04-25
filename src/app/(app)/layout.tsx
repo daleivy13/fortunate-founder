@@ -58,8 +58,8 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
     <div className="flex flex-col h-full">
       {/* Logo */}
       <div className="h-16 flex items-center gap-3 px-5 border-b border-slate-100 flex-shrink-0">
-        <div className="w-8 h-8 bg-gradient-to-br from-pool-500 to-[#00c3e3] rounded-xl flex items-center justify-center flex-shrink-0">
-          <Waves className="w-4 h-4 text-white" />
+        <div className="w-8 h-8 rounded-xl overflow-hidden flex-shrink-0">
+          <img src="/logo.png" alt="PoolPal AI" className="w-full h-full object-cover" />
         </div>
         <div className="flex-1 min-w-0">
           <div className="font-bold text-pool-900 text-sm leading-none">PoolPal AI</div>

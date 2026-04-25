@@ -72,8 +72,8 @@ function CustomerPortalContent() {
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
       <div className="bg-white border-b border-slate-200 px-6 py-4 flex items-center gap-3">
-        <div className="w-8 h-8 bg-[#1756a9] rounded-xl flex items-center justify-center">
-          <Waves className="w-4 h-4 text-white" />
+        <div className="w-8 h-8 rounded-xl overflow-hidden">
+          <img src="/logo.png" alt="" className="w-full h-full object-cover" />
         </div>
         <div>
           <p className="font-bold text-slate-900 text-sm">{company.name}</p>

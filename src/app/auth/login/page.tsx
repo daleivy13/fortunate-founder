@@ -66,8 +66,8 @@ function LoginForm() {
       {/* Left panel */}
       <div className="hidden lg:flex w-1/2 bg-gradient-to-br from-pool-900 via-pool-700 to-teal-600 flex-col justify-between p-12">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur">
-            <Waves className="w-5 h-5 text-white" />
+          <div className="w-10 h-10 rounded-xl overflow-hidden bg-white/10">
+            <img src="/logo.png" alt="PoolPal AI" className="w-full h-full object-cover" />
           </div>
           <span className="text-white font-bold text-xl">PoolPal AI</span>
         </div>
@@ -101,8 +101,8 @@ function LoginForm() {
         <div className="w-full max-w-md">
           {/* Mobile logo */}
           <div className="flex lg:hidden items-center gap-2 mb-10">
-            <div className="w-9 h-9 bg-pool-500 rounded-xl flex items-center justify-center">
-              <Waves className="w-5 h-5 text-white" />
+            <div className="w-9 h-9 rounded-xl overflow-hidden">
+              <img src="/logo.png" alt="PoolPal AI" className="w-full h-full object-cover" />
             </div>
             <span className="font-bold text-lg text-pool-900">PoolPal AI</span>
           </div>

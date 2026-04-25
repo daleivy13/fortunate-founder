@@ -41,8 +41,8 @@ export default function LandingPage() {
       {/* Nav */}
       <nav className="border-b border-slate-100 px-6 py-4 flex items-center justify-between sticky top-0 bg-white/95 backdrop-blur z-50">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-[#1756a9] rounded-xl flex items-center justify-center">
-            <Waves className="w-4 h-4 text-white" />
+          <div className="w-8 h-8 rounded-xl overflow-hidden">
+            <img src="/logo.png" alt="PoolPal AI" className="w-full h-full object-cover" />
           </div>
           <span className="font-bold text-slate-900 text-lg">PoolPal AI</span>
         </div>

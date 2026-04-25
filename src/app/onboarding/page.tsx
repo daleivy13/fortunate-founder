@@ -100,7 +100,7 @@ export default function OnboardingPage() {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       <div className="bg-white border-b border-slate-100 px-6 py-4 flex items-center gap-3">
-        <div className="w-8 h-8 bg-[#1756a9] rounded-xl flex items-center justify-center"><Waves className="w-4 h-4 text-white"/></div>
+        <div className="w-8 h-8 rounded-xl overflow-hidden"><img src="/logo.png" alt="PoolPal AI" className="w-full h-full object-cover" /></div>
         <span className="font-bold text-slate-900">PoolPal AI</span>
         <div className="flex-1 mx-6 h-1.5 bg-slate-100 rounded-full overflow-hidden">
           <div className="h-full bg-[#0891c4] rounded-full transition-all duration-500" style={{width:`${pct}%`}}/>

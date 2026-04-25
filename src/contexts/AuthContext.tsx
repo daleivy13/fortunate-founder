@@ -4,7 +4,7 @@ import {
   createContext, useContext, useEffect, useState, ReactNode, useCallback,
 } from "react";
 import {
-  User, onIdTokenChanged, signInWithRedirect, getRedirectResult,
+  User, onIdTokenChanged, signInWithPopup,
   signOut as firebaseSignOut,
   signInWithEmailAndPassword, createUserWithEmailAndPassword,
 } from "firebase/auth";
@@ -65,15 +65,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     else     router.push("/dashboard");
   }, [fetchCompany, router]);
 
-  // Handle Google/Apple redirect result on mount
-  useEffect(() => {
-    getRedirectResult(auth)
-      .then(async (result) => {
-        if (result?.user) await afterSignIn(result.user);
-      })
-      .catch(() => {});
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
   // Keep session cookie fresh on every token refresh (every ~1 hour)
   useEffect(() => {
     const unsub = onIdTokenChanged(auth, async (u) => {
@@ -95,11 +86,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [fetchCompany, router]);
 
   const signInWithGoogle = async () => {
-    await signInWithRedirect(auth, googleProvider);
+    const result = await signInWithPopup(auth, googleProvider);
+    await afterSignIn(result.user);
   };
 
   const signInWithApple = async () => {
-    await signInWithRedirect(auth, appleProvider);
+    const result = await signInWithPopup(auth, appleProvider);
+    await afterSignIn(result.user);
   };
 
   const signInWithEmail = async (email: string, password: string) => {
