@@ -28,6 +28,10 @@ export default function AnalyticsPage() {
   const taxDeduction = Math.round(totalMiles * 0.67 * 100) / 100;
   const estSavings   = Math.round(taxDeduction * 0.22 * 100) / 100;
 
+  // Declare invoices + pools early so exportTaxCSV and monthlyRevenue can reference them
+  const invoices: any[] = invoicesData?.invoices ?? [];
+  const allPools: any[] = poolsData?.pools ?? [];
+
   const exportTaxCSV = () => {
     const mileageLogs: any[] = mileageData?.logs ?? [];
     const paidInvoices = invoices.filter((i: any) => i.status === "paid");
@@ -68,9 +72,25 @@ export default function AnalyticsPage() {
     URL.revokeObjectURL(url);
   };
 
+  // Monthly revenue chart — group paid invoices by month
+  const monthlyRevenue = (() => {
+    const byMonth: Record<string, number> = {};
+    for (const inv of invoices) {
+      if (inv.status !== "paid") continue;
+      const d = new Date(inv.paidAt ?? inv.createdAt);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      byMonth[key] = (byMonth[key] ?? 0) + parseFloat(inv.amount ?? 0);
+    }
+    return Object.entries(byMonth)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-12)
+      .map(([month, revenue]) => ({
+        month: new Date(month + "-01").toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
+        revenue: Math.round(revenue),
+      }));
+  })();
+
   // Per-pool profitability — revenue from paid invoices per pool vs monthly rate
-  const invoices: any[] = invoicesData?.invoices ?? [];
-  const allPools: any[] = poolsData?.pools ?? [];
   const poolProfitability = allPools
     .filter(p => p.monthlyRate)
     .map(p => {
@@ -189,6 +209,22 @@ export default function AnalyticsPage() {
           )}
         </div>
       </div>
+
+      {/* Monthly Revenue Chart */}
+      {monthlyRevenue.length > 1 && (
+        <div className="card p-5">
+          <h2 className="font-bold text-slate-900 mb-5">Monthly Revenue (Last 12 Months)</h2>
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={monthlyRevenue} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#94a3b8" }} />
+              <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} tickFormatter={v => `$${v}`} />
+              <Tooltip formatter={(v: any) => [`$${v.toLocaleString()}`, "Revenue"]} />
+              <Bar dataKey="revenue" fill="#1756a9" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
 
       {/* Per-pool profitability */}
       {poolProfitability.length > 0 && (

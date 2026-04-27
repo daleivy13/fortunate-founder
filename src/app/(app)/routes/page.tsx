@@ -71,6 +71,8 @@ export default function SmartRoutesPage() {
     }
   }, [poolsData]);
 
+  const [routeComplete, setRouteComplete] = useState(false);
+
   // Tick every 30s to update elapsed time on active stop
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 30_000);
@@ -113,6 +115,8 @@ export default function SmartRoutesPage() {
       const updated = prev.map((s) => s.id === stopId ? { ...s, status: "complete" } : s);
       const nextIdx = updated.findIndex((s) => s.status === "pending");
       if (nextIdx !== -1) updated[nextIdx] = { ...updated[nextIdx], status: "current" };
+      // Check if all stops are now complete
+      if (updated.every(s => s.status === "complete")) setRouteComplete(true);
       return updated;
     });
     setExpanded(null);
@@ -165,6 +169,40 @@ export default function SmartRoutesPage() {
     return (
       <div className="flex justify-center py-24">
         <Loader2 className="w-6 h-6 animate-spin text-pool-500" />
+      </div>
+    );
+  }
+
+  if (routeComplete && stops.length > 0) {
+    const totalTime = Object.values(stopDuration).reduce((s, v) => s + v, 0);
+    const chemCount = chemLogged.size;
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-6 animate-fade-in px-4">
+        <div className="w-20 h-20 rounded-full bg-emerald-100 flex items-center justify-center">
+          <CheckCircle2 className="w-10 h-10 text-emerald-500" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 mb-2">Route Complete! 🎉</h1>
+          <p className="text-slate-500">All {stops.length} stops finished for today.</p>
+        </div>
+        <div className="grid grid-cols-3 gap-4 w-full max-w-sm">
+          {[
+            { v: stops.length.toString(), l: "Pools serviced" },
+            { v: totalTime > 0 ? `${totalTime} min` : `${displayMiles.toFixed(1)} mi`, l: totalTime > 0 ? "Total time" : "Miles driven" },
+            { v: chemCount > 0 ? chemCount.toString() : "—", l: "Chem readings" },
+          ].map(s => (
+            <div key={s.l} className="card p-3 text-center">
+              <p className="text-xl font-bold text-slate-900">{s.v}</p>
+              <p className="text-xs text-slate-400 mt-0.5">{s.l}</p>
+            </div>
+          ))}
+        </div>
+        <div className="flex flex-col gap-2 w-full max-w-sm">
+          <Link href="/reports"><button className="btn-primary w-full">+ Log Service Reports</button></Link>
+          <button onClick={() => { setRouteComplete(false); setStops(poolsData?.pools?.map(buildStopFromPool) ?? []); }} className="btn-outline w-full">
+            Start New Route
+          </button>
+        </div>
       </div>
     );
   }

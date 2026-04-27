@@ -3,12 +3,13 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { usePools, useReports, useInvoices, useMileage } from "@/hooks/useData";
 import { useQuery } from "@tanstack/react-query";
-import { MapPin, AlertTriangle, DollarSign, Car, Waves, CheckCircle2, Clock, PartyPopper, Wrench } from "lucide-react";
+import { MapPin, AlertTriangle, DollarSign, Car, Waves, CheckCircle2, Clock, PartyPopper, Wrench, CalendarDays } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
-const DAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+const DAYS      = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 export default function DashboardPage() {
   const { user, company } = useAuth();
@@ -301,6 +302,48 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+
+      {/* Weekly Schedule */}
+      {pools.some(p => p.serviceDay) && (
+        <div className="card p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="section-title flex items-center gap-2">
+              <CalendarDays className="w-4 h-4 text-pool-600" />This Week's Schedule
+            </h2>
+            <Link href="/routes" className="text-xs text-pool-600 font-medium hover:underline">Open routes →</Link>
+          </div>
+          <div className="grid grid-cols-7 gap-1.5">
+            {DAYS.map((day, dayIdx) => {
+              const dayPools = pools.filter(p => p.serviceDay === day);
+              const isToday  = dayIdx === new Date().getDay();
+              return (
+                <div key={day} className={`rounded-xl p-2.5 min-h-[80px] ${isToday ? "bg-pool-50 border border-pool-200" : "bg-slate-50"}`}>
+                  <p className={`text-[10px] font-bold uppercase tracking-wide mb-2 text-center ${isToday ? "text-pool-700" : "text-slate-400"}`}>
+                    {DAY_NAMES[dayIdx]}
+                    {isToday && <span className="ml-1 text-[8px] bg-pool-500 text-white rounded px-0.5">Today</span>}
+                  </p>
+                  {dayPools.length === 0 ? (
+                    <p className="text-[9px] text-slate-300 text-center">—</p>
+                  ) : (
+                    <div className="space-y-1">
+                      {dayPools.slice(0, 3).map(p => (
+                        <Link key={p.id} href={`/pools/${p.id}`}>
+                          <div className="text-[9px] leading-tight bg-white rounded-lg px-1.5 py-1 text-slate-700 font-medium truncate hover:bg-pool-50 transition-colors cursor-pointer">
+                            {p.name}
+                          </div>
+                        </Link>
+                      ))}
+                      {dayPools.length > 3 && (
+                        <p className="text-[9px] text-slate-400 text-center">+{dayPools.length - 3} more</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

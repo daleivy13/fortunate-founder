@@ -1,26 +1,41 @@
 "use client";
 
 import { useState } from "react";
-import { Search, Plus, Waves, Phone, Mail, MoreVertical, Loader2 } from "lucide-react";
+import { Search, Plus, Waves, Phone, Mail, Loader2, CalendarDays } from "lucide-react";
 import Link from "next/link";
 import { usePools } from "@/hooks/useData";
 
+const SERVICE_DAYS = ["all", "mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
+const TODAY_DAY = ["sun","mon","tue","wed","thu","fri","sat"][new Date().getDay()];
+
 export default function PoolsPage() {
-  const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<"all" | "residential" | "commercial" | "hoa">("all");
+  const [search,    setSearch]    = useState("");
+  const [filter,    setFilter]    = useState<"all" | "residential" | "commercial" | "hoa">("all");
+  const [dayFilter, setDayFilter] = useState<string>("all");
+  const [sortBy,    setSortBy]    = useState<"name" | "service_day" | "monthly_rate">("name");
   const { data, isLoading, isError } = usePools();
 
   const allPools = (data?.pools ?? []) as any[];
 
-  const pools = allPools.filter((p) => {
-    const q = search.toLowerCase();
-    const matchSearch =
-      p.name.toLowerCase().includes(q) ||
-      p.clientName.toLowerCase().includes(q) ||
-      p.address.toLowerCase().includes(q);
-    const matchFilter = filter === "all" || p.type === filter;
-    return matchSearch && matchFilter;
-  });
+  const pools = allPools
+    .filter((p) => {
+      const q = search.toLowerCase();
+      const matchSearch =
+        p.name.toLowerCase().includes(q) ||
+        p.clientName.toLowerCase().includes(q) ||
+        p.address.toLowerCase().includes(q);
+      const matchFilter = filter === "all" || p.type === filter;
+      const matchDay    = dayFilter === "all" || p.serviceDay === dayFilter;
+      return matchSearch && matchFilter && matchDay;
+    })
+    .sort((a, b) => {
+      if (sortBy === "monthly_rate") return (b.monthlyRate ?? 0) - (a.monthlyRate ?? 0);
+      if (sortBy === "service_day") {
+        const dayOrder = ["mon","tue","wed","thu","fri","sat","sun"];
+        return (dayOrder.indexOf(a.serviceDay ?? "") ?? 7) - (dayOrder.indexOf(b.serviceDay ?? "") ?? 7);
+      }
+      return (a.name ?? "").localeCompare(b.name ?? "");
+    });
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -39,29 +54,54 @@ export default function PoolsPage() {
       </div>
 
       {/* Search + filter */}
-      <div className="flex gap-3 flex-wrap">
-        <div className="relative flex-1 min-w-48">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search pools, clients, addresses..."
-            className="input pl-10"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+      <div className="space-y-3">
+        <div className="flex gap-3 flex-wrap">
+          <div className="relative flex-1 min-w-48">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search pools, clients, addresses..."
+              className="input pl-10"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <select
+            className="input w-auto"
+            value={sortBy}
+            onChange={e => setSortBy(e.target.value as typeof sortBy)}
+          >
+            <option value="name">Sort: Name</option>
+            <option value="service_day">Sort: Service Day</option>
+            <option value="monthly_rate">Sort: Rate (high→low)</option>
+          </select>
         </div>
         <div className="flex gap-2 flex-wrap">
           {(["all", "residential", "commercial", "hoa"] as const).map((f) => (
             <button
               key={f}
               onClick={() => setFilter(f)}
-              className={`px-4 py-2 rounded-xl text-sm font-medium capitalize transition-all ${
-                filter === f
-                  ? "bg-pool-500 text-white"
+              className={`px-3 py-1.5 rounded-xl text-sm font-medium capitalize transition-all ${
+                filter === f ? "bg-pool-500 text-white" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              {f === "all" ? "All Types" : f}
+            </button>
+          ))}
+          <div className="w-px bg-slate-200 mx-1" />
+          {SERVICE_DAYS.map((d) => (
+            <button
+              key={d}
+              onClick={() => setDayFilter(d)}
+              className={`px-3 py-1.5 rounded-xl text-sm font-medium capitalize transition-all ${
+                dayFilter === d
+                  ? "bg-amber-500 text-white"
+                  : d === TODAY_DAY
+                  ? "bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-100"
                   : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
               }`}
             >
-              {f === "all" ? "All Pools" : f}
+              {d === "all" ? <><CalendarDays className="w-3.5 h-3.5 inline mr-1" />All Days</> : d.charAt(0).toUpperCase() + d.slice(1)}
             </button>
           ))}
         </div>
@@ -128,6 +168,17 @@ export default function PoolsPage() {
           </Link>
         ))}
       </div>
+
+      {pools.length > 0 && (
+        <div className="flex items-center justify-between text-xs text-slate-400 px-1">
+          <span>{pools.length} pool{pools.length !== 1 ? "s" : ""} shown</span>
+          {pools.some(p => p.monthlyRate) && (
+            <span className="font-semibold text-emerald-600">
+              ${pools.reduce((s: number, p: any) => s + (p.monthlyRate ?? 0), 0).toLocaleString()}/mo total rate
+            </span>
+          )}
+        </div>
+      )}
 
       {pools.length === 0 && !isLoading && (
         <div className="text-center py-16 text-slate-400">
