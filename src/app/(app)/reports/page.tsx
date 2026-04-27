@@ -2,8 +2,9 @@
 
 import { useState, useRef } from "react";
 import { useSearchParams } from "next/navigation";
-import { FileText, Plus, CheckCircle2, Send, Download, Camera, Loader2, ArrowLeft, X, WifiOff } from "lucide-react";
+import { FileText, Plus, CheckCircle2, Send, Download, Camera, Loader2, ArrowLeft, X, WifiOff, Star } from "lucide-react";
 import { useReports, useCreateReport, usePools } from "@/hooks/useData";
+import { useAuth } from "@/contexts/AuthContext";
 import Link from "next/link";
 import { enqueue } from "@/lib/offlineQueue";
 
@@ -24,9 +25,35 @@ const STATUS_DISPLAY: Record<string, { label: string; cls: string }> = {
 
 // ─── Report List ──────────────────────────────────────────────────────────────
 function ReportList({ onNew }: { onNew: () => void }) {
-  const [filter, setFilter] = useState<"all" | "pending" | "sent">("all");
-  const [sending, setSending] = useState<number | null>(null);
+  const [filter,       setFilter]      = useState<"all" | "pending" | "sent">("all");
+  const [sending,      setSending]     = useState<number | null>(null);
+  const [ratingSending, setRatingSending] = useState<number | null>(null);
+  const [ratingsSent,  setRatingsSent] = useState<Set<number>>(new Set());
+  const { company } = useAuth();
   const { data, isLoading, refetch } = useReports();
+
+  const requestRating = async (r: any, pool: any) => {
+    setRatingSending(r.id);
+    try {
+      const token = btoa(`${r.id}:${r.poolId}:${company?.id}:${encodeURIComponent(company?.name ?? "")}:${encodeURIComponent(pool?.name ?? "")}`);
+      const ratingUrl = `${process.env.NEXT_PUBLIC_APP_URL}/rate?token=${token}`;
+      const res = await fetch("/api/sms", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: pool.clientPhone,
+          message: `Hi! How was your pool service today? Leave us a quick rating: ${ratingUrl}`,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "SMS failed");
+      setRatingsSent(prev => new Set(prev).add(r.id));
+    } catch (e: any) {
+      alert(e.message ?? "Failed to send rating request");
+    } finally {
+      setRatingSending(null);
+    }
+  };
 
   const sendToClient = async (reportId: number) => {
     setSending(reportId);
@@ -145,20 +172,36 @@ function ReportList({ onNew }: { onNew: () => void }) {
                 <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mt-2">⚠ {r.issuesFound}</p>
               )}
 
-              {r.status !== "sent" && pool?.clientEmail && (
-                <div className="mt-3 pt-3 border-t border-slate-100">
-                  <button
-                    onClick={() => sendToClient(r.id)}
-                    disabled={sending === r.id}
-                    className="btn-secondary text-xs py-1.5 px-3 w-full"
-                  >
-                    {sending === r.id
-                      ? <Loader2 className="w-3 h-3 animate-spin mx-auto" />
-                      : <><Send className="w-3 h-3" /> Email Report to {pool.clientName}</>
-                    }
-                  </button>
+              {(r.status !== "sent" && pool?.clientEmail) || pool?.clientPhone ? (
+                <div className="mt-3 pt-3 border-t border-slate-100 flex flex-col gap-2">
+                  {r.status !== "sent" && pool?.clientEmail && (
+                    <button
+                      onClick={() => sendToClient(r.id)}
+                      disabled={sending === r.id}
+                      className="btn-secondary text-xs py-1.5 px-3 w-full"
+                    >
+                      {sending === r.id
+                        ? <Loader2 className="w-3 h-3 animate-spin mx-auto" />
+                        : <><Send className="w-3 h-3" /> Email Report to {pool.clientName}</>
+                      }
+                    </button>
+                  )}
+                  {pool?.clientPhone && (r.status === "sent" || r.status === "complete") && (
+                    <button
+                      onClick={() => requestRating(r, pool)}
+                      disabled={ratingSending === r.id || ratingsSent.has(r.id)}
+                      className="btn-outline text-xs py-1.5 px-3 w-full flex items-center justify-center gap-1.5 disabled:opacity-50"
+                    >
+                      {ratingSending === r.id
+                        ? <Loader2 className="w-3 h-3 animate-spin" />
+                        : ratingsSent.has(r.id)
+                          ? <><Star className="w-3 h-3 text-amber-400 fill-amber-400" /> Rating Requested</>
+                          : <><Star className="w-3 h-3" /> Request Rating</>
+                      }
+                    </button>
+                  )}
                 </div>
-              )}
+              ) : null}
             </div>
           );
         })}
