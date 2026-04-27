@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Navigation, CheckCircle2, Clock, Car, Thermometer, Droplets, Wind, Sun, ChevronDown, ChevronUp, ClipboardList, Zap, Loader2, GripVertical, ArrowUp, ArrowDown, MessageSquare } from "lucide-react";
+import { Navigation, CheckCircle2, Clock, Car, Thermometer, Droplets, Wind, Sun, ChevronDown, ChevronUp, ClipboardList, Zap, Loader2, ArrowUp, ArrowDown, MessageSquare, FlaskConical, Timer } from "lucide-react";
 import { useGPS } from "@/hooks/useGPS";
 import { usePools } from "@/hooks/useData";
 import { useAuth } from "@/contexts/AuthContext";
@@ -51,6 +51,16 @@ export default function SmartRoutesPage() {
   const [omwSending,   setOmwSending]  = useState<number | null>(null);
   const [omwSent,      setOmwSent]     = useState<Set<number>>(new Set());
 
+  // Stop time tracking
+  const [arrivedAt,    setArrivedAt]   = useState<Record<number, number>>({});
+  const [stopDuration, setStopDuration] = useState<Record<number, number>>({});
+  const [now,          setNow]          = useState(Date.now());
+
+  // Quick chemistry log per stop
+  const [chemForms,    setChemForms]   = useState<Record<number, { cl: string; ph: string; ta: string }>>({});
+  const [chemLogging,  setChemLogging] = useState<number | null>(null);
+  const [chemLogged,   setChemLogged]  = useState<Set<number>>(new Set());
+
   // Build stops from real pools whenever pool data loads
   useEffect(() => {
     if (poolsData?.pools) {
@@ -60,6 +70,12 @@ export default function SmartRoutesPage() {
       if (built.length > 0) setExpanded(built[0].id);
     }
   }, [poolsData]);
+
+  // Tick every 30s to update elapsed time on active stop
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
 
   // Fetch weather intelligence using browser geolocation
   useEffect(() => {
@@ -91,14 +107,35 @@ export default function SmartRoutesPage() {
   };
 
   const markComplete = (stopId: number) => {
+    const elapsed = arrivedAt[stopId] ? Math.round((Date.now() - arrivedAt[stopId]) / 60000) : 0;
+    if (elapsed > 0) setStopDuration(p => ({ ...p, [stopId]: elapsed }));
     setStops((prev) => {
       const updated = prev.map((s) => s.id === stopId ? { ...s, status: "complete" } : s);
-      // Set next pending stop to current
       const nextIdx = updated.findIndex((s) => s.status === "pending");
       if (nextIdx !== -1) updated[nextIdx] = { ...updated[nextIdx], status: "current" };
       return updated;
     });
     setExpanded(null);
+  };
+
+  const logChemistry = async (stop: any) => {
+    const form = chemForms[stop.id] ?? { cl: "", ph: "", ta: "" };
+    if (!form.cl && !form.ph && !form.ta) return;
+    setChemLogging(stop.id);
+    try {
+      await fetch("/api/chemistry/readings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          poolId:          stop.pool.id,
+          freeChlorine:    form.cl ? parseFloat(form.cl) : undefined,
+          ph:              form.ph ? parseFloat(form.ph) : undefined,
+          totalAlkalinity: form.ta ? parseFloat(form.ta) : undefined,
+        }),
+      });
+      setChemLogged(p => new Set([...p, stop.id]));
+    } catch { /* silent — non-critical */ }
+    finally { setChemLogging(null); }
   };
 
   const sendOmw = async (stop: any) => {
@@ -281,15 +318,30 @@ export default function SmartRoutesPage() {
                   </div>
                 </div>
 
+                {s === "complete" && stopDuration[stop.id] && (
+                  <p className="text-xs text-slate-400 mt-1 flex items-center gap-1">
+                    <Timer className="w-3 h-3" />{stopDuration[stop.id]} min at this stop
+                  </p>
+                )}
                 {s !== "complete" && (
                   <button
-                    onClick={() => setExpanded(isExp ? null : stop.id)}
+                    onClick={() => {
+                      const opening = !isExp;
+                      setExpanded(opening ? stop.id : null);
+                      if (opening && !arrivedAt[stop.id]) setArrivedAt(p => ({ ...p, [stop.id]: Date.now() }));
+                    }}
                     className="w-full flex items-center justify-center gap-1 mt-3 pt-3 border-t border-slate-100 text-xs text-[#1756a9] font-medium"
                   >
                     {isExp
                       ? <><ChevronUp className="w-3.5 h-3.5" />Hide details</>
                       : <><ChevronDown className="w-3.5 h-3.5" />View details</>}
                   </button>
+                )}
+                {s !== "complete" && isExp && arrivedAt[stop.id] && (
+                  <p className="text-xs text-emerald-600 font-medium flex items-center gap-1 mt-1">
+                    <Timer className="w-3 h-3" />
+                    {Math.max(1, Math.round((now - arrivedAt[stop.id]) / 60000))} min at stop
+                  </p>
                 )}
               </div>
 
@@ -326,6 +378,47 @@ export default function SmartRoutesPage() {
                       ))}
                     </div>
                   )}
+                  {/* Quick chemistry log */}
+                  <div className="p-4 border-b border-slate-100">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide flex items-center gap-1 mb-2">
+                      <FlaskConical className="w-3 h-3" />Quick Chemistry Log
+                    </p>
+                    {chemLogged.has(stop.id) ? (
+                      <p className="text-xs text-emerald-600 font-semibold flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" />Chemistry logged ✓
+                      </p>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        {[
+                          { key: "cl", label: "Cl", placeholder: "2.0" },
+                          { key: "ph", label: "pH", placeholder: "7.4" },
+                          { key: "ta", label: "TA", placeholder: "90"  },
+                        ].map(f => (
+                          <div key={f.key} className="flex-1">
+                            <label className="text-[10px] text-slate-400 font-medium block mb-0.5">{f.label}</label>
+                            <input
+                              type="number"
+                              step="0.1"
+                              placeholder={f.placeholder}
+                              className="input py-1.5 text-sm text-center"
+                              value={chemForms[stop.id]?.[f.key as "cl"|"ph"|"ta"] ?? ""}
+                              onChange={e => setChemForms(p => ({
+                                ...p, [stop.id]: { ...(p[stop.id] ?? { cl:"", ph:"", ta:"" }), [f.key]: e.target.value }
+                              }))}
+                            />
+                          </div>
+                        ))}
+                        <button
+                          onClick={() => logChemistry(stop)}
+                          disabled={chemLogging === stop.id}
+                          className="btn-primary text-xs py-2 px-3 mt-3.5"
+                        >
+                          {chemLogging === stop.id ? <Loader2 className="w-3 h-3 animate-spin" /> : "Log"}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
                   {stop.pool.notes && (
                     <div className="p-4 bg-[#e8f1fc] border-b border-blue-100 flex gap-2">
                       <span className="flex-shrink-0">📝</span>

@@ -4,7 +4,7 @@ import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis,
   CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell,
 } from "recharts";
-import { Loader2, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { Loader2, TrendingUp, TrendingDown, Minus, Download } from "lucide-react";
 import { useAnalytics, useMileage, usePools, useInvoices } from "@/hooks/useData";
 
 const POOL_COLORS = ["#0ea5e9", "#1756a9", "#6366f1"];
@@ -27,6 +27,46 @@ export default function AnalyticsPage() {
   const totalMiles   = Number(mileageData?.totalMiles ?? 0);
   const taxDeduction = Math.round(totalMiles * 0.67 * 100) / 100;
   const estSavings   = Math.round(taxDeduction * 0.22 * 100) / 100;
+
+  const exportTaxCSV = () => {
+    const mileageLogs: any[] = mileageData?.logs ?? [];
+    const paidInvoices = invoices.filter((i: any) => i.status === "paid");
+
+    const rows: string[][] = [["Date", "Type", "Description", "Miles", "Deduction Rate", "Tax Deduction", "Revenue"]];
+
+    for (const log of mileageLogs) {
+      rows.push([
+        log.date ?? log.created_at?.slice(0, 10) ?? "",
+        "Mileage",
+        log.purpose ?? "Pool service route",
+        String(log.miles ?? 0),
+        "0.67",
+        String(Math.round((log.miles ?? 0) * 0.67 * 100) / 100),
+        "",
+      ]);
+    }
+
+    for (const inv of paidInvoices) {
+      rows.push([
+        inv.paidAt?.slice(0, 10) ?? inv.created_at?.slice(0, 10) ?? "",
+        "Revenue",
+        `Invoice #${inv.id} — ${inv.clientName}`,
+        "",
+        "",
+        "",
+        String(parseFloat(inv.amount ?? 0).toFixed(2)),
+      ]);
+    }
+
+    const csv = rows.map(r => r.map(c => `"${c}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url;
+    a.download = `poolpal-tax-export-${new Date().getFullYear()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   // Per-pool profitability — revenue from paid invoices per pool vs monthly rate
   const invoices: any[] = invoicesData?.invoices ?? [];
@@ -124,7 +164,12 @@ export default function AnalyticsPage() {
 
         {/* Mileage & tax */}
         <div className="card p-5">
-          <h2 className="font-bold text-slate-900 mb-4">Mileage & Tax Deductions</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-bold text-slate-900">Mileage & Tax Deductions</h2>
+            <button onClick={exportTaxCSV} className="btn-outline text-xs py-1.5 px-3 flex items-center gap-1.5">
+              <Download className="w-3.5 h-3.5" />Export CSV
+            </button>
+          </div>
           <div className="space-y-3">
             {[
               { label: "Total Miles Logged",              value: `${totalMiles.toFixed(1)} mi`         },

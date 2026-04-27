@@ -33,7 +33,7 @@ const EQUIPMENT_CATEGORIES = [
   { value: "other",    label: "Other",        icon: "🔧" },
 ];
 
-type TabType = "overview" | "equipment" | "aqualink" | "tasks";
+type TabType = "overview" | "equipment" | "aqualink" | "tasks" | "notes";
 
 // ── AquaLink Panel ─────────────────────────────────────────────────────────────
 function AquaLinkPanel({ poolId }: { poolId: number }) {
@@ -228,14 +228,24 @@ function EquipmentPanel({ poolId }: { poolId: number }) {
   const equipment: any[] = data?.equipment ?? [];
 
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ category: "pump", brand: "", model: "", serialNumber: "", installedAt: "", warrantyExp: "", notes: "" });
+  const [form, setForm] = useState({ category: "pump", brand: "", model: "", serialNumber: "", installedAt: "", warrantyExp: "", lastServicedAt: "", serviceIntervalDays: "", notes: "" });
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setForm(p => ({ ...p, [k]: e.target.value }));
 
   const handleAdd = async () => {
     await createEquipment.mutateAsync({ poolId, ...form });
-    setForm({ category: "pump", brand: "", model: "", serialNumber: "", installedAt: "", warrantyExp: "", notes: "" });
+    setForm({ category: "pump", brand: "", model: "", serialNumber: "", installedAt: "", warrantyExp: "", lastServicedAt: "", serviceIntervalDays: "", notes: "" });
     setShowForm(false);
+  };
+
+  const markServiced = async (id: number) => {
+    await fetch("/api/equipment", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, lastServicedAt: new Date().toISOString() }),
+    });
+    // Invalidate equipment cache
+    window.location.reload();
   };
 
   if (isLoading) return <div className="flex justify-center py-12"><Loader2 className="w-5 h-5 animate-spin text-slate-400" /></div>;
@@ -284,6 +294,14 @@ function EquipmentPanel({ poolId }: { poolId: number }) {
               <label className="label">Warranty Expires</label>
               <input type="date" className="input" value={form.warrantyExp} onChange={set("warrantyExp")} />
             </div>
+            <div>
+              <label className="label">Last Serviced</label>
+              <input type="date" className="input" value={form.lastServicedAt} onChange={set("lastServicedAt")} />
+            </div>
+            <div>
+              <label className="label">Service Interval (days)</label>
+              <input type="number" className="input" placeholder="90" value={form.serviceIntervalDays} onChange={set("serviceIntervalDays")} />
+            </div>
             <div className="col-span-2">
               <label className="label">Notes</label>
               <textarea className="input" rows={2} placeholder="Any service notes…" value={form.notes} onChange={set("notes")} />
@@ -308,17 +326,27 @@ function EquipmentPanel({ poolId }: { poolId: number }) {
         <div className="space-y-3">
           {equipment.map((item: any) => {
             const cat = EQUIPMENT_CATEGORIES.find(c => c.value === item.category);
-            const warrantyExp = item.warrantyExp ? new Date(item.warrantyExp) : null;
+            const warrantyExp = item.warrantyExp || item.warranty_exp ? new Date(item.warrantyExp || item.warranty_exp) : null;
             const warrantyExpired = warrantyExp && warrantyExp < new Date();
             const warrantyDays = warrantyExp ? Math.ceil((warrantyExp.getTime() - Date.now()) / 86400000) : null;
 
+            const lastServiced    = item.lastServicedAt || item.last_serviced_at ? new Date(item.lastServicedAt || item.last_serviced_at) : null;
+            const intervalDays    = item.serviceIntervalDays || item.service_interval_days ? parseInt(item.serviceIntervalDays || item.service_interval_days) : null;
+            const nextServiceDate = lastServiced && intervalDays ? new Date(lastServiced.getTime() + intervalDays * 86400000) : null;
+            const serviceDaysLeft = nextServiceDate ? Math.ceil((nextServiceDate.getTime() - Date.now()) / 86400000) : null;
+            const serviceOverdue  = serviceDaysLeft !== null && serviceDaysLeft < 0;
+
             return (
-              <div key={item.id} className="card p-4 flex gap-4">
+              <div key={item.id} className={`card p-4 flex gap-4 ${serviceOverdue ? "border-red-300 bg-red-50" : ""}`}>
                 <div className="text-2xl flex-shrink-0">{cat?.icon ?? "🔧"}</div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <p className="font-semibold text-slate-900">{item.brand} {item.model}</p>
                     <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full capitalize">{cat?.label ?? item.category}</span>
+                    {serviceOverdue && <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-bold">Service Overdue</span>}
+                    {serviceDaysLeft !== null && !serviceOverdue && serviceDaysLeft <= 14 && (
+                      <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-bold">Due Soon</span>
+                    )}
                   </div>
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400">
                     {item.serialNumber && <span>SN: {item.serialNumber}</span>}
@@ -328,8 +356,18 @@ function EquipmentPanel({ poolId }: { poolId: number }) {
                         Warranty: {warrantyExpired ? "Expired" : `${warrantyDays}d left`} ({warrantyExp.toLocaleDateString()})
                       </span>
                     )}
+                    {nextServiceDate && (
+                      <span className={serviceOverdue ? "text-red-500 font-medium" : serviceDaysLeft! <= 14 ? "text-amber-500 font-medium" : ""}>
+                        Next service: {serviceOverdue ? `${Math.abs(serviceDaysLeft!)}d overdue` : `in ${serviceDaysLeft}d`} ({nextServiceDate.toLocaleDateString()})
+                      </span>
+                    )}
                   </div>
                   {item.notes && <p className="text-xs text-slate-500 mt-1.5 italic">{item.notes}</p>}
+                  {(serviceOverdue || (serviceDaysLeft !== null && serviceDaysLeft <= 14)) && (
+                    <button onClick={() => markServiced(item.id)} className="mt-2 text-xs btn-outline py-1 px-3">
+                      ✓ Mark Serviced Today
+                    </button>
+                  )}
                 </div>
                 <button
                   onClick={() => deleteEquipment.mutate({ id: item.id, poolId })}
@@ -454,6 +492,129 @@ function TasksPanel({ poolId }: { poolId: number }) {
   );
 }
 
+// ── Notes Panel ───────────────────────────────────────────────────────────────
+const NOTE_TYPES = [
+  { value: "note",  label: "Note",  icon: "📝" },
+  { value: "call",  label: "Call",  icon: "📞" },
+  { value: "email", label: "Email", icon: "📧" },
+  { value: "sms",   label: "SMS",   icon: "💬" },
+];
+
+function NotesPanel({ poolId }: { poolId: number }) {
+  const qc = useQueryClient();
+  const [noteText, setNoteText] = useState("");
+  const [noteType, setNoteType] = useState("note");
+  const [saving, setSaving] = useState(false);
+  const [tableError, setTableError] = useState(false);
+
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ["pool-notes", poolId],
+    queryFn: async () => {
+      const res = await fetch(`/api/pools/notes?poolId=${poolId}`);
+      return res.json();
+    },
+    enabled: !!poolId,
+  });
+
+  const notes: any[] = data?.notes ?? [];
+
+  const addNote = async () => {
+    if (!noteText.trim()) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/pools/notes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ poolId, note: noteText.trim(), type: noteType }),
+      });
+      const d = await res.json();
+      if (d.error && d.sql) {
+        setTableError(true);
+        setSaving(false);
+        return;
+      }
+      setNoteText("");
+      refetch();
+      qc.invalidateQueries({ queryKey: ["pool-notes", poolId] });
+    } catch {}
+    setSaving(false);
+  };
+
+  const deleteNote = async (id: number) => {
+    await fetch(`/api/pools/notes?id=${id}`, { method: "DELETE" });
+    refetch();
+  };
+
+  if (tableError) {
+    return (
+      <div className="card p-5 bg-amber-50 border-amber-200">
+        <p className="font-semibold text-amber-900 mb-2">One-time setup required</p>
+        <p className="text-sm text-amber-700 mb-3">Run this SQL in your Neon console to enable client notes:</p>
+        <code className="block bg-white border border-amber-200 rounded-xl px-4 py-3 text-xs text-slate-700 break-all select-all">
+          {"CREATE TABLE IF NOT EXISTS client_notes (id SERIAL PRIMARY KEY, pool_id INTEGER NOT NULL REFERENCES pools(id), author_id TEXT, note TEXT NOT NULL, type TEXT DEFAULT 'note', created_at TIMESTAMP DEFAULT NOW());"}
+        </code>
+        <button onClick={() => setTableError(false)} className="btn-outline mt-3 text-sm">Retry</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Add note form */}
+      <div className="card p-5 space-y-3">
+        <div className="flex gap-2">
+          {NOTE_TYPES.map(t => (
+            <button key={t.value} onClick={() => setNoteType(t.value)}
+              className={`text-xs px-3 py-1.5 rounded-xl font-medium border transition-all ${noteType === t.value ? "bg-pool-500 text-white border-pool-500" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"}`}>
+              {t.icon} {t.label}
+            </button>
+          ))}
+        </div>
+        <textarea
+          className="input resize-none"
+          rows={3}
+          placeholder="Add a note about this client or pool…"
+          value={noteText}
+          onChange={e => setNoteText(e.target.value)}
+        />
+        <button onClick={addNote} disabled={saving || !noteText.trim()} className="btn-primary w-full text-sm">
+          {saving ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : "Add Note"}
+        </button>
+      </div>
+
+      {/* Notes list */}
+      {isLoading ? (
+        <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-slate-400" /></div>
+      ) : notes.length === 0 ? (
+        <div className="text-center py-10 text-slate-400">
+          <Settings2 className="w-8 h-8 mx-auto mb-2 opacity-30" />
+          <p className="text-sm">No notes yet — add your first one above</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {notes.map((n: any) => {
+            const typeInfo = NOTE_TYPES.find(t => t.value === n.type) ?? NOTE_TYPES[0];
+            return (
+              <div key={n.id} className="card p-4 flex gap-3">
+                <span className="text-lg flex-shrink-0">{typeInfo.icon}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-slate-800 leading-relaxed">{n.note}</p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    {typeInfo.label} · {new Date(n.created_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                  </p>
+                </div>
+                <button onClick={() => deleteNote(n.id)} className="text-slate-300 hover:text-red-400 flex-shrink-0">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main Page ──────────────────────────────────────────────────────────────────
 export default function PoolDetailPage() {
   const { id } = useParams();
@@ -523,6 +684,7 @@ export default function PoolDetailPage() {
     { id: "overview",  label: "Overview",  icon: <Waves className="w-4 h-4" /> },
     { id: "tasks",     label: "Tasks",     icon: <ClipboardList className="w-4 h-4" /> },
     { id: "equipment", label: "Equipment", icon: <Wrench className="w-4 h-4" /> },
+    { id: "notes",     label: "Notes",     icon: <FileText className="w-4 h-4" /> },
     { id: "aqualink",  label: "AquaLink",  icon: <Zap className="w-4 h-4" /> },
   ];
 
@@ -572,6 +734,10 @@ export default function PoolDetailPage() {
 
       {tab === "equipment" && (
         <EquipmentPanel poolId={pool.id} />
+      )}
+
+      {tab === "notes" && (
+        <NotesPanel poolId={pool.id} />
       )}
 
       {tab === "aqualink" && (
