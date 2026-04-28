@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { Waves, MapPin, FlaskConical, FileText, DollarSign, Car, Star, ChevronRight, CheckCircle2, Zap, Users, TrendingUp } from "lucide-react";
+import { PricingCalculator } from "@/components/PricingCalculator";
+import { WhySwitchSection } from "@/components/WhySwitchSection";
 
 const FEATURES = [
   { icon: MapPin,       title: "Smart Routes",          desc: "Weather-aware daily routes with AI dosage adjustments. Navigate pool-to-pool with one tap."     },
@@ -51,6 +53,11 @@ export default function LandingPage() {
           <a href="#pricing" className="hover:text-slate-900 transition-colors">Pricing</a>
           <a href="#testimonials" className="hover:text-slate-900 transition-colors">Reviews</a>
           <Link href="/homeowner" className="hover:text-slate-900 transition-colors">Homeowners</Link>
+          <div className="flex items-center gap-1 text-xs border border-slate-200 rounded-lg overflow-hidden">
+            <span className="px-2 py-1 bg-[#e8f1fc] text-[#1756a9] font-bold">🇺🇸 US</span>
+            <Link href="/pool-service-software/uk" className="px-2 py-1 hover:bg-slate-50 transition-colors">🇬🇧 UK</Link>
+            <Link href="/pool-service-software/australia" className="px-2 py-1 hover:bg-slate-50 transition-colors">🇦🇺 AU</Link>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <Link href="/auth/login" className="text-sm font-medium text-slate-600 hover:text-slate-900 hidden sm:block">
@@ -123,6 +130,9 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* Pricing Calculator (vs competitors) */}
+      <PricingCalculator />
+
       {/* How it works */}
       <section className="px-6 py-20 max-w-4xl mx-auto">
         <div className="text-center mb-14">
@@ -169,6 +179,9 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+
+      {/* Why Switch from Skimmer */}
+      <WhySwitchSection />
 
       {/* Pricing */}
       <section id="pricing" className="px-6 py-20 max-w-5xl mx-auto">

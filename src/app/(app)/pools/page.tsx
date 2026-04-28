@@ -4,16 +4,50 @@ import { useState } from "react";
 import { Search, Plus, Waves, Phone, Mail, Loader2, CalendarDays } from "lucide-react";
 import Link from "next/link";
 import { usePools } from "@/hooks/useData";
+import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/contexts/AuthContext";
 
 const SERVICE_DAYS = ["all", "mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 const TODAY_DAY = ["sun","mon","tue","wed","thu","fri","sat"][new Date().getDay()];
+
+const GRADE_COLORS: Record<string, string> = {
+  A: "bg-emerald-100 text-emerald-700",
+  B: "bg-blue-100 text-blue-700",
+  C: "bg-amber-100 text-amber-700",
+  D: "bg-orange-100 text-orange-700",
+  F: "bg-red-100 text-red-700",
+};
 
 export default function PoolsPage() {
   const [search,    setSearch]    = useState("");
   const [filter,    setFilter]    = useState<"all" | "residential" | "commercial" | "hoa">("all");
   const [dayFilter, setDayFilter] = useState<string>("all");
-  const [sortBy,    setSortBy]    = useState<"name" | "service_day" | "monthly_rate">("name");
+  const [sortBy,    setSortBy]    = useState<"name" | "service_day" | "monthly_rate" | "profitability" | "health">("name");
   const { data, isLoading, isError } = usePools();
+  const { company } = useAuth();
+
+  const { data: profData } = useQuery({
+    queryKey: ["pool-profitability", company?.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/pools/profitability?companyId=${company!.id}`);
+      return res.json();
+    },
+    enabled: !!company?.id,
+  });
+
+  const { data: healthData } = useQuery({
+    queryKey: ["client-health", company?.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/clients/health?companyId=${company!.id}`);
+      return res.json();
+    },
+    enabled: !!company?.id,
+  });
+
+  const profMap: Record<number, string>   = {};
+  const healthMap: Record<number, string> = {};
+  for (const p of profData?.pools ?? [])   profMap[p.poolId]   = p.grade;
+  for (const h of healthData?.clients ?? []) healthMap[h.poolId] = h.grade;
 
   const allPools = (data?.pools ?? []) as any[];
 
@@ -33,6 +67,14 @@ export default function PoolsPage() {
       if (sortBy === "service_day") {
         const dayOrder = ["mon","tue","wed","thu","fri","sat","sun"];
         return (dayOrder.indexOf(a.serviceDay ?? "") ?? 7) - (dayOrder.indexOf(b.serviceDay ?? "") ?? 7);
+      }
+      if (sortBy === "profitability") {
+        const gradeOrder = { A: 0, B: 1, C: 2, D: 3, F: 4 };
+        return (gradeOrder[profMap[a.id] as keyof typeof gradeOrder] ?? 5) - (gradeOrder[profMap[b.id] as keyof typeof gradeOrder] ?? 5);
+      }
+      if (sortBy === "health") {
+        const gradeOrder = { A: 0, B: 1, C: 2, D: 3, F: 4 };
+        return (gradeOrder[healthMap[a.id] as keyof typeof gradeOrder] ?? 5) - (gradeOrder[healthMap[b.id] as keyof typeof gradeOrder] ?? 5);
       }
       return (a.name ?? "").localeCompare(b.name ?? "");
     });
@@ -74,6 +116,8 @@ export default function PoolsPage() {
             <option value="name">Sort: Name</option>
             <option value="service_day">Sort: Service Day</option>
             <option value="monthly_rate">Sort: Rate (high→low)</option>
+            <option value="profitability">Sort: Profitability</option>
+            <option value="health">Sort: Client Health</option>
           </select>
         </div>
         <div className="flex gap-2 flex-wrap">
@@ -128,7 +172,19 @@ export default function PoolsPage() {
                   <p className="font-bold text-slate-900 truncate">{pool.name}</p>
                   <p className="text-xs text-slate-400 mt-0.5">{pool.clientName}</p>
                 </div>
-                <span className="badge badge-slate capitalize ml-2 flex-shrink-0">{pool.type}</span>
+                <div className="flex items-center gap-1.5 ml-2 flex-shrink-0">
+                  {profMap[pool.id] && (
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${GRADE_COLORS[profMap[pool.id]]}`} title="Profitability">
+                      P:{profMap[pool.id]}
+                    </span>
+                  )}
+                  {healthMap[pool.id] && (
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${GRADE_COLORS[healthMap[pool.id]]}`} title="Client Health">
+                      H:{healthMap[pool.id]}
+                    </span>
+                  )}
+                  <span className="badge badge-slate capitalize">{pool.type}</span>
+                </div>
               </div>
 
               <div className="space-y-1.5 pt-3 border-t border-slate-100">

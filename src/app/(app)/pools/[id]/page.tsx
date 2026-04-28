@@ -2,12 +2,13 @@
 
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { usePool, useEquipment, useCreateEquipment, useDeleteEquipment, useAquaLink, useAquaLinkControl } from "@/hooks/useData";
+import { usePool, useEquipment, useCreateEquipment, useDeleteEquipment, useAquaLink, useAquaLinkControl, usePools } from "@/hooks/useData";
 import {
   ArrowLeft, Waves, Phone, Mail, MapPin, FlaskConical,
   FileText, AlertTriangle, CheckCircle2, Clock, Link2,
   Wrench, Plus, Trash2, Zap, Thermometer, Droplets, Wind,
   Power, Settings2, Camera, X, Loader2, ClipboardList, RefreshCw,
+  TrendingUp, DollarSign, ShoppingCart, Send, Copy,
 } from "lucide-react";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
@@ -33,7 +34,7 @@ const EQUIPMENT_CATEGORIES = [
   { value: "other",    label: "Other",        icon: "🔧" },
 ];
 
-type TabType = "overview" | "equipment" | "aqualink" | "tasks" | "notes";
+type TabType = "overview" | "equipment" | "aqualink" | "tasks" | "notes" | "billing";
 
 // ── AquaLink Panel ─────────────────────────────────────────────────────────────
 function AquaLinkPanel({ poolId }: { poolId: number }) {
@@ -615,6 +616,195 @@ function NotesPanel({ poolId }: { poolId: number }) {
   );
 }
 
+// ── Billing Settings Panel ────────────────────────────────────────────────────
+function BillingPanel({ pool }: { pool: any }) {
+  const [autoBilling, setAutoBilling] = useState<boolean>(pool.auto_billing ?? pool.autoBilling ?? false);
+  const [billingDay, setBillingDay]   = useState<number>(pool.billing_day ?? pool.billingDay ?? 1);
+  const [saving, setSaving]           = useState(false);
+  const [saved, setSaved]             = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await fetch("/api/billing/auto", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "update_billing", poolId: pool.id, autoBilling, billingDay }),
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch {}
+    setSaving(false);
+  };
+
+  const setupStripe = async () => {
+    const res = await fetch("/api/billing/auto", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "setup", poolId: pool.id, clientEmail: pool.clientEmail }),
+    });
+    const d = await res.json();
+    if (d.url) window.open(d.url, "_blank");
+  };
+
+  return (
+    <div className="space-y-5 max-w-lg">
+      <div className="card p-5 space-y-4">
+        <h3 className="font-bold text-slate-900">Auto-Billing Settings</h3>
+
+        <div className="flex items-center justify-between py-3 border-b border-slate-100">
+          <div>
+            <p className="text-sm font-medium text-slate-900">Auto-billing enabled</p>
+            <p className="text-xs text-slate-400 mt-0.5">Automatically send an invoice on the billing day each month</p>
+          </div>
+          <button
+            onClick={() => setAutoBilling(p => !p)}
+            className={`relative w-12 h-6 rounded-full transition-colors ${autoBilling ? "bg-emerald-500" : "bg-slate-200"}`}
+          >
+            <span className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${autoBilling ? "translate-x-6" : "translate-x-0.5"}`} />
+          </button>
+        </div>
+
+        <div>
+          <label className="label">Billing day of month</label>
+          <select className="input w-32" value={billingDay} onChange={e => setBillingDay(parseInt(e.target.value))}>
+            {Array.from({ length: 28 }, (_, i) => i + 1).map(d => (
+              <option key={d} value={d}>{d}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex gap-2">
+          <button onClick={save} disabled={saving} className="btn-primary text-sm">
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? "✓ Saved" : "Save Settings"}
+          </button>
+          {pool.clientEmail && (
+            <button onClick={setupStripe} className="btn-outline text-sm flex items-center gap-1.5">
+              <DollarSign className="w-3.5 h-3.5" /> Set Up Client Payment
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-pool-50 border border-pool-200 rounded-xl p-4 text-sm text-pool-800">
+        <p className="font-semibold mb-1">How auto-billing works</p>
+        <ul className="text-xs text-pool-700 space-y-1 list-disc list-inside">
+          <li>On the billing day, an invoice is auto-created for the monthly rate</li>
+          <li>Client receives email with a Stripe payment link</li>
+          <li>Payment is deposited to your bank account via Stripe</li>
+          <li>Add STRIPE_SECRET_KEY to .env.local to activate</li>
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+// ── Parts Panel ────────────────────────────────────────────────────────────────
+function PartsPanel({ poolId, poolName }: { poolId: number; poolName: string }) {
+  const { company } = useAuth();
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ["parts-for-pool", poolId],
+    queryFn: async () => {
+      const res = await fetch(`/api/parts?companyId=${company!.id}&poolId=${poolId}`);
+      return res.json();
+    },
+    enabled: !!company?.id,
+  });
+
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ name: "", partNumber: "", quantityNeeded: 1, unitCost: "", notes: "" });
+  const [saving, setSaving] = useState(false);
+  const parts: any[] = data?.parts ?? [];
+
+  const handleAdd = async () => {
+    setSaving(true);
+    try {
+      await fetch("/api/parts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId: company!.id, poolId, ...form, status: "needed" }),
+      });
+      setForm({ name: "", partNumber: "", quantityNeeded: 1, unitCost: "", notes: "" });
+      setShowForm(false);
+      refetch();
+    } catch {}
+    setSaving(false);
+  };
+
+  const updateStatus = async (id: number, status: string) => {
+    await fetch("/api/parts", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, status }),
+    });
+    refetch();
+  };
+
+  if (isLoading) return <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-slate-400" /></div>;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-slate-500">{parts.length} part{parts.length !== 1 ? "s" : ""} tracked for {poolName}</p>
+        <button onClick={() => setShowForm(true)} className="btn-primary text-sm flex items-center gap-1.5">
+          <Plus className="w-3.5 h-3.5" /> Add Part
+        </button>
+      </div>
+
+      {showForm && (
+        <div className="card p-5 border-2 border-pool-200 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-slate-900">Add Part</h3>
+            <button onClick={() => setShowForm(false)}><X className="w-4 h-4 text-slate-400" /></button>
+          </div>
+          <input className="input" placeholder="Part name *" value={form.name} onChange={e => setForm(p => ({...p, name: e.target.value}))} />
+          <div className="grid grid-cols-2 gap-2">
+            <input className="input" placeholder="Part # (optional)" value={form.partNumber} onChange={e => setForm(p => ({...p, partNumber: e.target.value}))} />
+            <input type="number" className="input" placeholder="Unit cost $" value={form.unitCost} onChange={e => setForm(p => ({...p, unitCost: e.target.value}))} />
+          </div>
+          <div className="flex gap-2">
+            <button onClick={handleAdd} disabled={saving || !form.name} className="btn-primary flex-1 text-sm">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : "Add Part"}
+            </button>
+            <button onClick={() => setShowForm(false)} className="btn-secondary text-sm">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {parts.length === 0 && !showForm ? (
+        <div className="text-center py-8 text-slate-400">
+          <ShoppingCart className="w-8 h-8 mx-auto mb-2 opacity-30" />
+          <p className="text-sm">No parts tracked for this pool</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {parts.map((p: any) => (
+            <div key={p.id} className="card p-3 flex items-center gap-3">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-slate-900 truncate">{p.name}</p>
+                <p className="text-xs text-slate-400">{p.partNumber ? `#${p.partNumber} · ` : ""}{p.unitCost ? `$${p.unitCost} each` : ""}</p>
+              </div>
+              <div className="flex gap-1.5 items-center flex-shrink-0">
+                {p.status === "needed" && (
+                  <button onClick={() => updateStatus(p.id, "ordered")} className="text-xs btn-secondary py-1 px-2">Mark Ordered</button>
+                )}
+                {p.status === "ordered" && (
+                  <button onClick={() => updateStatus(p.id, "received")} className="text-xs btn-primary py-1 px-2">Mark Received</button>
+                )}
+                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                  p.status === "needed" ? "bg-red-100 text-red-700" :
+                  p.status === "ordered" ? "bg-amber-100 text-amber-700" :
+                  "bg-emerald-100 text-emerald-700"
+                }`}>{p.status}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main Page ──────────────────────────────────────────────────────────────────
 export default function PoolDetailPage() {
   const { id } = useParams();
@@ -624,7 +814,43 @@ export default function PoolDetailPage() {
   const [copiedPortal, setCopiedPortal] = useState(false);
   const [tab, setTab] = useState<TabType>("overview");
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [showRateModal, setShowRateModal] = useState(false);
+  const [rateEmail, setRateEmail] = useState<{subject:string;body:string} | null>(null);
+  const [generatingEmail, setGeneratingEmail] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const { data: profData } = useQuery({
+    queryKey: ["pool-profitability", company?.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/pools/profitability?companyId=${company!.id}`);
+      return res.json();
+    },
+    enabled: !!company?.id,
+  });
+
+  const { data: healthDataQ } = useQuery({
+    queryKey: ["client-health", company?.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/clients/health?companyId=${company!.id}`);
+      return res.json();
+    },
+    enabled: !!company?.id,
+  });
+
+  const generateRateEmail = async () => {
+    if (!pool) return;
+    setGeneratingEmail(true);
+    try {
+      const res = await fetch("/api/ai/rate-increase", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ poolId: pool.id }),
+      });
+      const d = await res.json();
+      if (d.subject) setRateEmail({ subject: d.subject, body: d.body });
+    } catch {}
+    setGeneratingEmail(false);
+  };
 
   const copyPortalLink = async () => {
     if (!company) return;
@@ -660,6 +886,16 @@ export default function PoolDetailPage() {
   const { pool, readings, reports } = data ?? EMPTY;
   const latest = readings?.[0];
 
+  const thisPoolProf   = (profData?.pools ?? []).find((p: any) => p.poolId === pool?.id);
+  const thisPoolHealth = (healthDataQ?.clients ?? []).find((c: any) => c.poolId === pool?.id);
+  const GRADE_COLORS: Record<string, string> = {
+    A: "text-emerald-600 bg-emerald-50 border-emerald-200",
+    B: "text-blue-600 bg-blue-50 border-blue-200",
+    C: "text-amber-600 bg-amber-50 border-amber-200",
+    D: "text-orange-600 bg-orange-50 border-orange-200",
+    F: "text-red-600 bg-red-50 border-red-200",
+  };
+
   if (isLoading) {
     return <div className="flex items-center justify-center min-h-64"><div className="w-8 h-8 border-2 border-pool-500 border-t-transparent rounded-full animate-spin" /></div>;
   }
@@ -685,6 +921,7 @@ export default function PoolDetailPage() {
     { id: "tasks",     label: "Tasks",     icon: <ClipboardList className="w-4 h-4" /> },
     { id: "equipment", label: "Equipment", icon: <Wrench className="w-4 h-4" /> },
     { id: "notes",     label: "Notes",     icon: <FileText className="w-4 h-4" /> },
+    { id: "billing",   label: "Billing",   icon: <DollarSign className="w-4 h-4" /> },
     { id: "aqualink",  label: "AquaLink",  icon: <Zap className="w-4 h-4" /> },
   ];
 
@@ -728,6 +965,54 @@ export default function PoolDetailPage() {
         ))}
       </div>
 
+      {/* Rate Increase Modal */}
+      {showRateModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setShowRateModal(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[80vh] overflow-y-auto p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-slate-900">Rate Increase Email</h3>
+              <button onClick={() => setShowRateModal(false)}><X className="w-4 h-4 text-slate-400" /></button>
+            </div>
+            {generatingEmail ? (
+              <div className="flex flex-col items-center py-8 gap-3">
+                <Loader2 className="w-6 h-6 animate-spin text-pool-500" />
+                <p className="text-sm text-slate-500">Generating personalized email…</p>
+              </div>
+            ) : rateEmail ? (
+              <>
+                <div className="bg-slate-50 rounded-xl p-4 space-y-3 mb-4">
+                  <div>
+                    <p className="text-xs text-slate-400 mb-1">Subject</p>
+                    <p className="text-sm font-medium text-slate-900">{rateEmail.subject}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-400 mb-1">Body</p>
+                    <p className="text-sm text-slate-700 whitespace-pre-line leading-relaxed">{rateEmail.body}</p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(`Subject: ${rateEmail.subject}\n\n${rateEmail.body}`); }}
+                    className="btn-outline text-sm flex-1 flex items-center justify-center gap-1.5"
+                  >
+                    <Copy className="w-3.5 h-3.5" /> Copy Email
+                  </button>
+                  {pool.clientEmail && (
+                    <a href={`mailto:${pool.clientEmail}?subject=${encodeURIComponent(rateEmail.subject)}&body=${encodeURIComponent(rateEmail.body)}`}>
+                      <button className="btn-primary text-sm flex items-center gap-1.5">
+                        <Send className="w-3.5 h-3.5" /> Open in Mail
+                      </button>
+                    </a>
+                  )}
+                </div>
+              </>
+            ) : (
+              <button onClick={generateRateEmail} className="btn-primary w-full">Generate Email</button>
+            )}
+          </div>
+        </div>
+      )}
+
       {tab === "tasks" && (
         <TasksPanel poolId={pool.id} />
       )}
@@ -738,6 +1023,10 @@ export default function PoolDetailPage() {
 
       {tab === "notes" && (
         <NotesPanel poolId={pool.id} />
+      )}
+
+      {tab === "billing" && (
+        <BillingPanel pool={pool} />
       )}
 
       {tab === "aqualink" && (
@@ -802,6 +1091,52 @@ export default function PoolDetailPage() {
                 <p className="text-sm text-slate-600 leading-relaxed">{pool.notes}</p>
               </div>
             )}
+
+            {/* Profitability Score */}
+            {thisPoolProf && (
+              <div className={`card p-4 border ${GRADE_COLORS[thisPoolProf.grade] ?? ""}`}>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-bold text-slate-900">Profitability</h3>
+                  <span className={`text-2xl font-black ${GRADE_COLORS[thisPoolProf.grade]?.split(" ")[0] ?? ""}`}>{thisPoolProf.grade}</span>
+                </div>
+                <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden mb-2">
+                  <div
+                    className={`h-full rounded-full ${thisPoolProf.grade === "A" || thisPoolProf.grade === "B" ? "bg-emerald-500" : thisPoolProf.grade === "C" ? "bg-amber-400" : "bg-red-400"}`}
+                    style={{ width: `${Math.max(5, Math.min(100, thisPoolProf.margin ?? 0))}%` }}
+                  />
+                </div>
+                <p className="text-xs text-slate-500">{thisPoolProf.margin ?? 0}% margin · ${thisPoolProf.monthlyRate ?? pool.monthlyRate ?? 0}/mo</p>
+                {(thisPoolProf.grade === "D" || thisPoolProf.grade === "F") && (
+                  <button
+                    onClick={() => { setShowRateModal(true); generateRateEmail(); }}
+                    className="mt-2 w-full text-xs btn-outline py-1.5 flex items-center justify-center gap-1"
+                  >
+                    <TrendingUp className="w-3 h-3" /> Suggest Rate Increase
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Client Health Score */}
+            {thisPoolHealth && (
+              <div className={`card p-4 border ${GRADE_COLORS[thisPoolHealth.grade] ?? ""}`}>
+                <div className="flex items-center justify-between mb-1">
+                  <h3 className="text-sm font-bold text-slate-900">Client Health</h3>
+                  <span className={`text-2xl font-black ${GRADE_COLORS[thisPoolHealth.grade]?.split(" ")[0] ?? ""}`}>{thisPoolHealth.grade}</span>
+                </div>
+                <p className="text-xs text-slate-500">{thisPoolHealth.score}/100 overall score</p>
+                {(thisPoolHealth.flags ?? []).length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {thisPoolHealth.flags.slice(0, 2).map((f: string, i: number) => (
+                      <span key={i} className="text-[10px] bg-white/70 px-1.5 py-0.5 rounded-full text-slate-600">{f}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Parts needed */}
+            <PartsPanel poolId={pool.id} poolName={pool.name} />
 
             {/* Quick links to other tabs */}
             <div className="grid grid-cols-3 gap-2">

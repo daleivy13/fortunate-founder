@@ -240,6 +240,7 @@ function NewReportForm({ onBack, defaultPoolId }: { onBack: () => void; defaultP
   const [notes,   setNotes]   = useState("");
   const [dosages, setDosages] = useState<{ chemical: string; amount: string; unit: string }[]>([]);
   const [photos,  setPhotos]  = useState<string[]>([]);
+  const [photoIssues, setPhotoIssues] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [done,    setDone]    = useState(false);
   const [queued,  setQueued]  = useState(false);
@@ -268,6 +269,23 @@ function NewReportForm({ onBack, defaultPoolId }: { onBack: () => void; defaultP
         })
       );
       setPhotos((p) => [...p, ...urls]);
+      // Auto-analyze the first new photo for damage
+      if (urls[0]) {
+        try {
+          const aiRes = await fetch("/api/photos/analyze", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ imageUrl: urls[0] }),
+          });
+          const aiData = await aiRes.json();
+          if (aiData.issues?.length > 0) {
+            setPhotoIssues(aiData.issues);
+            if (aiData.issues.length > 0 && !issues) {
+              setIssues(aiData.issues.join("; "));
+            }
+          }
+        } catch { /* silently skip if AI fails */ }
+      }
     } catch (err: any) {
       setError(err.message ?? "Photo upload failed");
     } finally {
@@ -526,6 +544,16 @@ function NewReportForm({ onBack, defaultPoolId }: { onBack: () => void; defaultP
                     </button>
                   </div>
                 ))}
+              </div>
+            )}
+            {photoIssues.length > 0 && (
+              <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                <p className="text-xs font-bold text-amber-800 mb-2">🤖 AI detected in photo:</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {photoIssues.map((issue, i) => (
+                    <span key={i} className="text-xs bg-white text-amber-800 border border-amber-300 px-2 py-0.5 rounded-full">{issue}</span>
+                  ))}
+                </div>
               </div>
             )}
 

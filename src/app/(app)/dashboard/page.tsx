@@ -3,7 +3,7 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { usePools, useReports, useInvoices, useMileage } from "@/hooks/useData";
 import { useQuery } from "@tanstack/react-query";
-import { MapPin, AlertTriangle, DollarSign, Car, Waves, CheckCircle2, Clock, PartyPopper, Wrench, CalendarDays } from "lucide-react";
+import { MapPin, AlertTriangle, DollarSign, Car, Waves, CheckCircle2, Clock, PartyPopper, Wrench, CalendarDays, ShoppingCart } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -76,6 +76,23 @@ export default function DashboardPage() {
   if (dueInvoice) {
     chemAlerts.push({ pool: dueInvoice.clientName, msg: "Invoice awaiting payment", href: "/invoices" });
   }
+
+  const { data: equipData } = useQuery({
+    queryKey: ["all-equipment-alerts", company?.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/equipment?companyId=${company!.id}`);
+      return res.json();
+    },
+    enabled: !!company?.id,
+  });
+  const allEquipment: any[] = equipData?.equipment ?? [];
+  const equipAlerts = allEquipment.filter((e: any) => {
+    const last      = e.lastServicedAt || e.last_serviced_at ? new Date(e.lastServicedAt || e.last_serviced_at) : null;
+    const interval  = e.serviceIntervalDays || e.service_interval_days ? parseInt(e.serviceIntervalDays || e.service_interval_days) : null;
+    const nextDate  = last && interval ? new Date(last.getTime() + interval * 86400000) : null;
+    const daysLeft  = nextDate ? Math.ceil((nextDate.getTime() - Date.now()) / 86400000) : null;
+    return daysLeft !== null && daysLeft <= 14;
+  });
 
   const workOrders: any[] = woData?.workOrders ?? [];
   const openWOs   = workOrders.filter(w => w.status === "pending" || w.status === "in_progress").length;
@@ -299,6 +316,35 @@ export default function DashboardPage() {
                 </div>
               </div>
             </Link>
+          )}
+
+          {/* Equipment Alerts */}
+          {equipAlerts.length > 0 && (
+            <div className="card p-5">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="section-title flex items-center gap-2">
+                  <Wrench className="w-4 h-4 text-amber-500" /> Equipment Alerts
+                </h2>
+                <span className="text-xs bg-amber-100 text-amber-700 font-bold px-2 py-0.5 rounded-full">{equipAlerts.length}</span>
+              </div>
+              <div className="space-y-2">
+                {equipAlerts.slice(0, 3).map((e: any) => {
+                  const last     = e.lastServicedAt || e.last_serviced_at ? new Date(e.lastServicedAt || e.last_serviced_at) : null;
+                  const interval = e.serviceIntervalDays || e.service_interval_days ? parseInt(e.serviceIntervalDays || e.service_interval_days) : null;
+                  const nextDate = last && interval ? new Date(last.getTime() + interval * 86400000) : null;
+                  const daysLeft = nextDate ? Math.ceil((nextDate.getTime() - Date.now()) / 86400000) : null;
+                  return (
+                    <div key={e.id} className="flex items-center gap-2 text-sm">
+                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${daysLeft !== null && daysLeft < 0 ? "bg-red-500" : "bg-amber-400"}`} />
+                      <span className="truncate text-slate-700">{e.brand} {e.model}</span>
+                      <span className={`ml-auto text-xs font-medium flex-shrink-0 ${daysLeft !== null && daysLeft < 0 ? "text-red-600" : "text-amber-600"}`}>
+                        {daysLeft !== null && daysLeft < 0 ? `${Math.abs(daysLeft)}d overdue` : `${daysLeft}d left`}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           )}
         </div>
       </div>

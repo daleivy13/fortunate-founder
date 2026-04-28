@@ -2,10 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
-import { Receipt, Plus, Send, DollarSign, Clock, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import { Receipt, Plus, Send, DollarSign, Clock, CheckCircle2, AlertCircle, Loader2, RefreshCw } from "lucide-react";
 import { useInvoices, useCreateInvoice, useUpdateInvoice } from "@/hooks/useData";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePools } from "@/hooks/useData";
+import { useQuery } from "@tanstack/react-query";
 
 const STATUS = {
   paid:    { label: "Paid",    cls: "badge-green",  icon: CheckCircle2 },
@@ -19,6 +20,35 @@ export default function InvoicesPage() {
   const [filter, setFilter] = useState<"all" | "unpaid" | "paid">("all");
   const { data, isLoading } = useInvoices();
   const updateInvoice = useUpdateInvoice();
+  const { company } = useAuth();
+  const [runningBilling, setRunningBilling] = useState(false);
+  const [billingRan, setBillingRan] = useState(false);
+
+  const { data: autoBillingData } = useQuery({
+    queryKey: ["auto-billing", company?.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/billing/auto?companyId=${company!.id}`);
+      return res.json();
+    },
+    enabled: !!company?.id,
+  });
+
+  const autoBillingPools: any[] = autoBillingData?.pools ?? [];
+  const todayBillingDay = new Date().getDate();
+  const dueTodayPools = autoBillingPools.filter((p: any) => p.billing_day === todayBillingDay);
+
+  const runBillingNow = async () => {
+    setRunningBilling(true);
+    try {
+      await fetch("/api/billing/auto", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "run", companyId: company!.id }),
+      });
+      setBillingRan(true);
+    } catch {}
+    setRunningBilling(false);
+  };
   const searchParams = useSearchParams();
   const woPreset = searchParams.get("wo") ? {
     woId:       parseInt(searchParams.get("wo") ?? "0"),
@@ -70,6 +100,40 @@ export default function InvoicesPage() {
           <Plus className="w-4 h-4" /> New Invoice
         </button>
       </div>
+
+      {/* Auto-billing summary */}
+      {autoBillingPools.length > 0 && (
+        <div className="card p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-bold text-slate-900 flex items-center gap-2">
+              <RefreshCw className="w-4 h-4 text-pool-600" /> Auto-Billing
+            </h2>
+            {dueTodayPools.length > 0 && !billingRan && (
+              <button onClick={runBillingNow} disabled={runningBilling} className="btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5">
+                {runningBilling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                Bill {dueTodayPools.length} today
+              </button>
+            )}
+            {billingRan && <span className="text-xs text-emerald-600 font-semibold">✓ Invoices sent</span>}
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-slate-50 rounded-xl p-3 text-center">
+              <p className="text-lg font-bold text-slate-900">{autoBillingPools.length}</p>
+              <p className="text-xs text-slate-400">Pools on auto-billing</p>
+            </div>
+            <div className="bg-amber-50 rounded-xl p-3 text-center">
+              <p className="text-lg font-bold text-amber-700">{dueTodayPools.length}</p>
+              <p className="text-xs text-slate-400">Due today (day {todayBillingDay})</p>
+            </div>
+            <div className="bg-emerald-50 rounded-xl p-3 text-center">
+              <p className="text-lg font-bold text-emerald-700">
+                ${autoBillingPools.reduce((s: number, p: any) => s + (p.monthly_rate ?? 0), 0).toLocaleString()}
+              </p>
+              <p className="text-xs text-slate-400">Monthly auto-billed</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4">

@@ -4,16 +4,35 @@ import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis,
   CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell,
 } from "recharts";
-import { Loader2, TrendingUp, TrendingDown, Minus, Download } from "lucide-react";
+import { Loader2, TrendingUp, TrendingDown, Minus, Download, Users, DollarSign } from "lucide-react";
 import { useAnalytics, useMileage, usePools, useInvoices } from "@/hooks/useData";
+import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/contexts/AuthContext";
+import Link from "next/link";
 
 const POOL_COLORS = ["#0ea5e9", "#1756a9", "#6366f1"];
+const GRADE_COLORS: Record<string, string> = {
+  A: "text-emerald-600 bg-emerald-50",
+  B: "text-blue-600 bg-blue-50",
+  C: "text-amber-600 bg-amber-50",
+  D: "text-orange-600 bg-orange-50",
+  F: "text-red-600 bg-red-50",
+};
 
 export default function AnalyticsPage() {
+  const { company } = useAuth();
   const { data: analytics, isLoading: loadingAnalytics } = useAnalytics();
   const { data: mileageData, isLoading: loadingMileage } = useMileage();
   const { data: poolsData } = usePools();
   const { data: invoicesData } = useInvoices();
+  const { data: healthData } = useQuery({
+    queryKey: ["client-health", company?.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/clients/health?companyId=${company!.id}`);
+      return res.json();
+    },
+    enabled: !!company?.id,
+  });
 
   const isLoading = loadingAnalytics || loadingMileage;
 
@@ -270,6 +289,104 @@ export default function AnalyticsPage() {
           <p className="text-xs text-slate-400 mt-4">
             💡 Pools below 40% margin may need a rate increase. Log actual chemical costs in service reports for exact figures.
           </p>
+        </div>
+      )}
+
+      {/* Client Health Score Section */}
+      {(healthData?.clients ?? []).length > 0 && (() => {
+        const clients: any[] = healthData.clients;
+        const gradeCounts: Record<string, number> = { A: 0, B: 0, C: 0, D: 0, F: 0 };
+        for (const c of clients) gradeCounts[c.grade] = (gradeCounts[c.grade] ?? 0) + 1;
+        const avgScore = Math.round(clients.reduce((s: number, c: any) => s + c.score, 0) / clients.length);
+        const fGrade   = clients.filter((c: any) => c.grade === "F");
+        const aGrade   = clients.filter((c: any) => c.grade === "A");
+        return (
+          <div className="card p-5">
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <h2 className="font-bold text-slate-900 flex items-center gap-2"><Users className="w-4 h-4 text-pool-600" /> Client Health Scores</h2>
+                <p className="text-xs text-slate-400 mt-0.5">Based on payment history, chemistry consistency, and service frequency</p>
+              </div>
+              <span className="text-2xl font-bold text-pool-600">{avgScore}<span className="text-sm text-slate-400 font-normal">/100 avg</span></span>
+            </div>
+            <div className="flex gap-2 mb-5 flex-wrap">
+              {Object.entries(gradeCounts).filter(([, v]) => v > 0).map(([g, count]) => (
+                <div key={g} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl ${GRADE_COLORS[g]}`}>
+                  <span className="text-sm font-bold">{g}</span>
+                  <span className="text-sm">{count}</span>
+                </div>
+              ))}
+            </div>
+            <div className="grid md:grid-cols-2 gap-4">
+              {fGrade.length > 0 && (
+                <div>
+                  <p className="text-xs font-bold text-red-700 mb-2">⚠ At-Risk Clients ({fGrade.length})</p>
+                  <div className="space-y-2">
+                    {fGrade.slice(0, 5).map((c: any) => (
+                      <Link key={c.poolId} href={`/pools/${c.poolId}`}>
+                        <div className="flex items-center justify-between py-1.5 px-3 bg-red-50 rounded-lg hover:bg-red-100 transition-colors">
+                          <div>
+                            <p className="text-sm font-medium text-slate-900">{c.clientName}</p>
+                            {c.flags?.[0] && <p className="text-xs text-red-600">{c.flags[0]}</p>}
+                          </div>
+                          <span className="text-xs font-bold text-red-700">{c.score}/100</span>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {aGrade.length > 0 && (
+                <div>
+                  <p className="text-xs font-bold text-emerald-700 mb-2">⭐ Top Clients ({aGrade.length})</p>
+                  <div className="space-y-2">
+                    {aGrade.slice(0, 5).map((c: any) => (
+                      <Link key={c.poolId} href={`/pools/${c.poolId}`}>
+                        <div className="flex items-center justify-between py-1.5 px-3 bg-emerald-50 rounded-lg hover:bg-emerald-100 transition-colors">
+                          <p className="text-sm font-medium text-slate-900">{c.clientName}</p>
+                          <span className="text-xs font-bold text-emerald-700">{c.score}/100</span>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Rate Review Section */}
+      {allPools.filter(p => p.monthlyRate && p.monthlyRate < 175).length > 0 && (
+        <div className="card p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="font-bold text-slate-900 flex items-center gap-2"><DollarSign className="w-4 h-4 text-emerald-600" /> Rate Review</h2>
+              <p className="text-xs text-slate-400 mt-0.5">Pools priced below market average — consider a rate increase</p>
+            </div>
+          </div>
+          <div className="space-y-2">
+            {allPools
+              .filter(p => p.monthlyRate && p.monthlyRate < 175)
+              .sort((a, b) => (a.monthlyRate ?? 0) - (b.monthlyRate ?? 0))
+              .slice(0, 8)
+              .map((p: any) => (
+                <Link key={p.id} href={`/pools/${p.id}`}>
+                  <div className="flex items-center justify-between py-2 px-3 bg-amber-50 rounded-lg hover:bg-amber-100 transition-colors">
+                    <div>
+                      <p className="text-sm font-medium text-slate-900">{p.name}</p>
+                      <p className="text-xs text-slate-500">{p.clientName}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-bold text-amber-700">${p.monthlyRate}/mo</p>
+                      <p className="text-xs text-slate-400">+${175 - p.monthlyRate} to market avg</p>
+                    </div>
+                  </div>
+                </Link>
+              ))
+            }
+          </div>
+          <p className="text-xs text-slate-400 mt-3">💡 Market average: $175/month. Open a pool to generate an AI rate increase email.</p>
         </div>
       )}
 

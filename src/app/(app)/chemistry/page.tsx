@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { FlaskConical, Zap, AlertTriangle, RefreshCw } from "lucide-react";
+import { useState, useTransition, useRef } from "react";
+import { FlaskConical, Zap, AlertTriangle, RefreshCw, Camera, Loader2 } from "lucide-react";
 import { useI18n } from "@/lib/i18n/context";
 
 interface Dosage { chemical: string; flOz: number | null; lbs: number | null; reason: string; urgency: "critical"|"high"|"normal"; }
@@ -24,7 +24,45 @@ export default function ChemistryPage() {
   const [vals,setVals]=useState({freeChlorine:"0.8",ph:"8.4",totalAlkalinity:"120",calciumHardness:"200",cyanuricAcid:"40",waterTemp:config.unitSystem==="metric"?"28":"82",volumeGallons:config.unitSystem==="metric"?"56000":"15000"});
   const [aiAnalysis,setAiAnalysis]=useState("");
   const [isPending,startTransition]=useTransition();
+  const [scanning,setScanning]=useState(false);
+  const [scanResult,setScanResult]=useState<{confidence:string;flags:string[]} | null>(null);
+  const scanRef=useRef<HTMLInputElement>(null);
   const dosages=calcDosages(vals);
+
+  const handleScanPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setScanning(true);
+    setScanResult(null);
+    try {
+      const reader = new FileReader();
+      const base64 = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve((reader.result as string).split(",")[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const res = await fetch("/api/chemistry/read-photo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageBase64: base64 }),
+      });
+      const data = await res.json();
+      if (data.readings) {
+        const r = data.readings;
+        setVals(p => ({
+          ...p,
+          ...(r.freeChlorine != null ? { freeChlorine: String(r.freeChlorine) } : {}),
+          ...(r.ph           != null ? { ph: String(r.ph) } : {}),
+          ...(r.totalAlkalinity != null ? { totalAlkalinity: String(r.totalAlkalinity) } : {}),
+          ...(r.calciumHardness != null ? { calciumHardness: String(r.calciumHardness) } : {}),
+          ...(r.cyanuricAcid   != null ? { cyanuricAcid: String(r.cyanuricAcid) } : {}),
+        }));
+        setScanResult({ confidence: data.confidence ?? "medium", flags: data.flags ?? [] });
+      }
+    } catch { /* silently fail */ }
+    setScanning(false);
+    if (scanRef.current) scanRef.current.value = "";
+  };
 
   const FIELDS=[
     {key:"freeChlorine",label:t("chemistry.freeChlorine"),unit:"ppm",target:"2.0–4.0",step:"0.1"},
@@ -42,15 +80,42 @@ export default function ChemistryPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-          <FlaskConical className="w-6 h-6 text-[#1756a9]" />{t("chemistry.title")}
-        </h1>
-        <p className="text-slate-500 text-sm mt-1">{t("chemistry.subtitle")}</p>
-        <p className="text-xs text-[#1756a9] mt-1 font-medium">
-          {config.flag} {config.nameEn} · {config.unitSystem==="metric"?"Metric (mL, L, g)":"Imperial (fl oz, gal, lbs)"}
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+            <FlaskConical className="w-6 h-6 text-[#1756a9]" />{t("chemistry.title")}
+          </h1>
+          <p className="text-slate-500 text-sm mt-1">{t("chemistry.subtitle")}</p>
+          <p className="text-xs text-[#1756a9] mt-1 font-medium">
+            {config.flag} {config.nameEn} · {config.unitSystem==="metric"?"Metric (mL, L, g)":"Imperial (fl oz, gal, lbs)"}
+          </p>
+        </div>
+        <div>
+          <input ref={scanRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleScanPhoto} />
+          <button
+            onClick={() => scanRef.current?.click()}
+            disabled={scanning}
+            className="btn-secondary text-sm flex items-center gap-2"
+          >
+            {scanning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
+            {scanning ? "Scanning…" : "📷 Scan Test Kit"}
+          </button>
+        </div>
       </div>
+      {scanResult && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
+          <p className="text-sm font-semibold text-emerald-800">
+            ✓ Values auto-detected ({scanResult.confidence} confidence) — please verify before treating
+          </p>
+          {scanResult.flags.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-2">
+              {scanResult.flags.map((f, i) => (
+                <span key={i} className="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">{f}</span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       <div className="grid lg:grid-cols-2 gap-6">
         <div className="card p-5">
           <h2 className="font-bold text-slate-900 mb-4">{t("chemistry.readings")}</h2>

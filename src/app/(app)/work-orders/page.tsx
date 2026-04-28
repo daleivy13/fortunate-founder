@@ -96,6 +96,42 @@ export default function WorkOrdersPage() {
   });
   const [formError, setFormError] = useState("");
 
+  // Complete-details state per WO
+  const [completeForm, setCompleteForm] = useState<Record<number, { notes: string; actualCost: string; parts: { name: string; cost: string }[] }>>({});
+  const [showCompleteForm, setShowCompleteForm] = useState<number | null>(null);
+
+  const initCompleteForm = (woId: number) => {
+    setCompleteForm(p => ({ ...p, [woId]: p[woId] ?? { notes: "", actualCost: "", parts: [] } }));
+    setShowCompleteForm(woId);
+  };
+
+  const addPart = (woId: number) => setCompleteForm(p => ({
+    ...p, [woId]: { ...p[woId], parts: [...(p[woId]?.parts ?? []), { name: "", cost: "" }] }
+  }));
+  const removePart = (woId: number, idx: number) => setCompleteForm(p => ({
+    ...p, [woId]: { ...p[woId], parts: p[woId].parts.filter((_: any, i: number) => i !== idx) }
+  }));
+  const setPart = (woId: number, idx: number, field: "name"|"cost", val: string) => setCompleteForm(p => ({
+    ...p, [woId]: { ...p[woId], parts: p[woId].parts.map((pt: any, i: number) => i === idx ? { ...pt, [field]: val } : pt) }
+  }));
+
+  const handleCompleteWithDetails = async (woId: number) => {
+    const cf = completeForm[woId];
+    const partsTotal = cf?.parts.reduce((s: number, pt: any) => s + (parseFloat(pt.cost) || 0), 0) ?? 0;
+    const actualCost = cf?.actualCost ? parseFloat(cf.actualCost) : partsTotal || undefined;
+    await updateWO.mutateAsync({
+      id: woId,
+      status: "complete",
+      completedAt: new Date().toISOString(),
+      techNotes: cf?.notes || undefined,
+      actualCost,
+      parts: cf?.parts.filter((pt: any) => pt.name).length
+        ? JSON.stringify(cf.parts.filter((pt: any) => pt.name))
+        : undefined,
+    });
+    setShowCompleteForm(null);
+  };
+
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setForm(p => ({ ...p, [k]: e.target.value }));
 
@@ -308,9 +344,81 @@ export default function WorkOrdersPage() {
                       </div>
                     )}
 
+                    {/* Parts list (from completed WO) */}
+                    {wo.parts && (() => {
+                      try {
+                        const parts = JSON.parse(wo.parts);
+                        if (!Array.isArray(parts) || parts.length === 0) return null;
+                        const total = parts.reduce((s: number, p: any) => s + (parseFloat(p.cost) || 0), 0);
+                        return (
+                          <div className="bg-slate-50 rounded-xl p-3">
+                            <p className="text-xs font-bold text-slate-500 mb-2">Parts Used</p>
+                            {parts.map((p: any, i: number) => (
+                              <div key={i} className="flex justify-between text-sm py-0.5">
+                                <span className="text-slate-700">{p.name}</span>
+                                {p.cost && <span className="font-medium text-slate-900">${parseFloat(p.cost).toFixed(2)}</span>}
+                              </div>
+                            ))}
+                            {total > 0 && (
+                              <div className="flex justify-between text-sm font-bold border-t border-slate-200 mt-2 pt-2">
+                                <span>Parts Total</span><span>${total.toFixed(2)}</span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      } catch { return null; }
+                    })()}
+
+                    {/* Complete-with-details form */}
+                    {showCompleteForm === wo.id && (
+                      <div className="bg-slate-50 rounded-xl p-4 space-y-3 border border-slate-200">
+                        <p className="text-sm font-semibold text-slate-800">Complete Work Order</p>
+                        <div>
+                          <label className="label">Tech Notes</label>
+                          <textarea className="input resize-none" rows={2} placeholder="What was done, any issues found…"
+                            value={completeForm[wo.id]?.notes ?? ""}
+                            onChange={e => setCompleteForm(p => ({ ...p, [wo.id]: { ...p[wo.id], notes: e.target.value } }))} />
+                        </div>
+                        <div>
+                          <label className="label">Actual Cost (override)</label>
+                          <input type="number" className="input" placeholder="Leave blank to sum parts"
+                            value={completeForm[wo.id]?.actualCost ?? ""}
+                            onChange={e => setCompleteForm(p => ({ ...p, [wo.id]: { ...p[wo.id], actualCost: e.target.value } }))} />
+                        </div>
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="label mb-0">Parts / Materials</label>
+                            <button onClick={() => addPart(wo.id)} className="text-xs text-pool-600 font-medium hover:underline">+ Add Part</button>
+                          </div>
+                          {(completeForm[wo.id]?.parts ?? []).map((pt: any, i: number) => (
+                            <div key={i} className="flex gap-2 mb-2">
+                              <input className="input flex-1" placeholder="O-ring, filter cartridge…"
+                                value={pt.name} onChange={e => setPart(wo.id, i, "name", e.target.value)} />
+                              <input className="input w-24" type="number" placeholder="$0.00"
+                                value={pt.cost} onChange={e => setPart(wo.id, i, "cost", e.target.value)} />
+                              <button onClick={() => removePart(wo.id, i)} className="text-slate-400 hover:text-red-500">
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                          {(completeForm[wo.id]?.parts ?? []).length > 0 && (
+                            <p className="text-xs text-slate-400">
+                              Parts total: ${(completeForm[wo.id]?.parts ?? []).reduce((s: number, p: any) => s + (parseFloat(p.cost) || 0), 0).toFixed(2)}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={() => handleCompleteWithDetails(wo.id)} disabled={updateWO.isPending} className="btn-primary flex-1 text-sm">
+                            {updateWO.isPending ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : <><CheckCircle2 className="w-3.5 h-3.5" /> Save & Complete</>}
+                          </button>
+                          <button onClick={() => setShowCompleteForm(null)} className="btn-secondary text-sm">Cancel</button>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Actions */}
                     <div className="flex gap-2 flex-wrap">
-                      {wo.status !== "complete" && wo.status !== "cancelled" && (
+                      {wo.status !== "complete" && wo.status !== "cancelled" && showCompleteForm !== wo.id && (
                         <>
                           {wo.status === "pending" && (
                             <button onClick={() => updateStatus(wo.id, "in_progress")} className="btn-secondary text-sm flex items-center gap-1.5">
@@ -318,7 +426,7 @@ export default function WorkOrdersPage() {
                             </button>
                           )}
                           {(wo.status === "pending" || wo.status === "in_progress") && (
-                            <button onClick={() => updateStatus(wo.id, "complete")} className="btn-primary text-sm flex items-center gap-1.5">
+                            <button onClick={() => initCompleteForm(wo.id)} className="btn-primary text-sm flex items-center gap-1.5">
                               <CheckCircle2 className="w-3.5 h-3.5" /> Mark Complete
                             </button>
                           )}
@@ -328,7 +436,7 @@ export default function WorkOrdersPage() {
                           </button>
                         </>
                       )}
-                      {wo.status === "complete" && !wo.invoiceId && (
+                      {wo.status === "complete" && !wo.invoice_id && (
                         <a
                           href={`/invoices?wo=${wo.id}&pool=${wo.pool_id}&client=${encodeURIComponent(wo.client_name ?? "")}&amount=${wo.actual_cost ?? wo.estimated_cost ?? ""}&title=${encodeURIComponent(wo.title)}`}
                           className="btn-secondary text-sm flex items-center gap-1.5"
