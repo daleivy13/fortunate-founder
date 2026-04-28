@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Navigation, CheckCircle2, Clock, Car, Thermometer, Droplets, Wind, Sun, ChevronDown, ChevronUp, ClipboardList, Zap, Loader2, ArrowUp, ArrowDown, MessageSquare, FlaskConical, Timer } from "lucide-react";
+import { Navigation, CheckCircle2, Clock, Car, Thermometer, Droplets, Wind, Sun, ChevronDown, ChevronUp, ClipboardList, Zap, Loader2, ArrowUp, ArrowDown, MessageSquare, FlaskConical, Timer, Wrench } from "lucide-react";
 import { useGPS } from "@/hooks/useGPS";
 import { usePools } from "@/hooks/useData";
 import { useAuth } from "@/contexts/AuthContext";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { StopCompletionModal } from "@/components/StopCompletionModal";
 
@@ -41,9 +42,25 @@ function buildStopFromPool(pool: any, idx: number) {
 }
 
 export default function SmartRoutesPage() {
-  const { user } = useAuth();
+  const { user, company } = useAuth();
   const { isTracking, totalMiles, startTracking, stopTracking } = useGPS(user?.uid ?? null);
   const { data: poolsData, isLoading } = usePools();
+
+  const { data: equipData } = useQuery({
+    queryKey: ["equipment-routes", company?.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/equipment?companyId=${company!.id}`);
+      return res.json() as Promise<{ equipment: any[] }>;
+    },
+    enabled: !!company?.id,
+  });
+  const equipByPool: Record<number, any[]> = {};
+  for (const eq of equipData?.equipment ?? []) {
+    if (eq.daysLeft !== null && eq.daysLeft <= 30) {
+      if (!equipByPool[eq.poolId]) equipByPool[eq.poolId] = [];
+      equipByPool[eq.poolId].push(eq);
+    }
+  }
 
   const [expanded,     setExpanded]    = useState<number | null>(null);
   const [stops,        setStops]       = useState<any[]>([]);
@@ -486,6 +503,23 @@ export default function SmartRoutesPage() {
                       </div>
                     )}
                   </div>
+
+                  {/* Equipment alerts */}
+                  {(equipByPool[stop.pool.id] ?? []).length > 0 && (
+                    <div className="p-4 bg-red-50 border-b border-red-100 space-y-1.5">
+                      <p className="text-[10px] font-bold text-red-700 uppercase tracking-wide flex items-center gap-1">
+                        <Wrench className="w-3 h-3" />Equipment alerts
+                      </p>
+                      {equipByPool[stop.pool.id].map((eq: any) => (
+                        <div key={eq.id} className={`flex items-center justify-between text-xs rounded-lg px-2.5 py-1.5 ${eq.daysLeft !== null && eq.daysLeft <= 0 ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-800"}`}>
+                          <span className="font-medium">{eq.name}</span>
+                          <span className="text-[10px] font-bold">
+                            {eq.daysLeft !== null && eq.daysLeft <= 0 ? `${Math.abs(eq.daysLeft)}d overdue` : `${eq.daysLeft}d left`}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
                   {stop.pool.notes && (
                     <div className="p-4 bg-[#e8f1fc] border-b border-blue-100 flex gap-2">

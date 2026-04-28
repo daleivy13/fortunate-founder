@@ -18,6 +18,19 @@ const TOP_MARKETS = [
   { slug:"sacramento-ca",      city:"Sacramento",    state:"CA", pools:120000, avg_temp:94,  tagline:"Central Valley pool pros choose PoolPal AI" },
   { slug:"austin-tx",          city:"Austin",        state:"TX", pools:95000,  avg_temp:97,  tagline:"Keep Austin's pools perfect with AI chemistry" },
   { slug:"charlotte-nc",       city:"Charlotte",     state:"NC", pools:88000,  avg_temp:90,  tagline:"Southeast pool service, supercharged" },
+  // UK markets
+  { slug:"london-uk",          city:"London",        state:"UK", pools:120000, avg_temp:72,  tagline:"London's pool industry runs on smarter software" },
+  { slug:"birmingham-uk",      city:"Birmingham",    state:"UK", pools:45000,  avg_temp:68,  tagline:"Midlands pool pros choose PoolPal AI" },
+  { slug:"manchester-uk",      city:"Manchester",    state:"UK", pools:38000,  avg_temp:65,  tagline:"Greater Manchester pool service, automated" },
+  { slug:"bristol-uk",         city:"Bristol",       state:"UK", pools:32000,  avg_temp:67,  tagline:"Southwest UK pool management made easy" },
+  { slug:"edinburgh-uk",       city:"Edinburgh",     state:"UK", pools:22000,  avg_temp:62,  tagline:"Scotland's go-to pool management platform" },
+  // Australia markets
+  { slug:"sydney-au",          city:"Sydney",        state:"AU", pools:180000, avg_temp:88,  tagline:"Sydney's pool industry runs on PoolPal AI" },
+  { slug:"melbourne-au",       city:"Melbourne",     state:"AU", pools:140000, avg_temp:82,  tagline:"Victoria's pool pros choose PoolPal AI" },
+  { slug:"brisbane-au",        city:"Brisbane",      state:"AU", pools:160000, avg_temp:91,  tagline:"Queensland heat demands smart chemistry" },
+  { slug:"perth-au",           city:"Perth",         state:"AU", pools:130000, avg_temp:95,  tagline:"WA's sunny climate means year-round service" },
+  { slug:"adelaide-au",        city:"Adelaide",      state:"AU", pools:95000,  avg_temp:90,  tagline:"South Australia pool service, supercharged" },
+  { slug:"gold-coast-au",      city:"Gold Coast",    state:"AU", pools:85000,  avg_temp:93,  tagline:"Hinterland heat burns chlorine fast — AI calculates it" },
 ];
 
 // Generate static pages for all markets

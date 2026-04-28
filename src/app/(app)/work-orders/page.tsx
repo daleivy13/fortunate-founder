@@ -87,12 +87,13 @@ export default function WorkOrdersPage() {
   const pools: any[]      = poolsData?.pools ?? [];
   const employees: any[]  = empData?.employees ?? [];
 
-  const [filter, setFilter] = useState<"all"|"pending"|"in_progress"|"complete">("all");
+  const [filter, setFilter] = useState<"all"|"pending"|"in_progress"|"complete"|"due_soon">("all");
   const [showNew, setShowNew] = useState(false);
   const [expanded, setExpanded] = useState<number | null>(null);
   const [form, setForm] = useState({
     poolId: "", title: "", description: "", priority: "normal",
     category: "repair", estimatedCost: "", scheduledAt: "", assignedTo: "",
+    recurring: false, intervalDays: "30", autoInvoice: false,
   });
   const [formError, setFormError] = useState("");
 
@@ -139,6 +140,9 @@ export default function WorkOrdersPage() {
     if (!form.poolId || !form.title.trim()) { setFormError("Pool and title are required"); return; }
     setFormError("");
     try {
+      const nextDueDate = form.recurring && form.scheduledAt ? form.scheduledAt
+        : form.recurring ? new Date(Date.now() + parseInt(form.intervalDays) * 86400000).toISOString().slice(0, 10)
+        : undefined;
       await createWO.mutateAsync({
         companyId:     company!.id,
         poolId:        parseInt(form.poolId),
@@ -149,8 +153,12 @@ export default function WorkOrdersPage() {
         estimatedCost: form.estimatedCost ? parseFloat(form.estimatedCost) : undefined,
         scheduledAt:   form.scheduledAt || undefined,
         assignedTo:    form.assignedTo || undefined,
+        recurring:     form.recurring || undefined,
+        intervalDays:  form.recurring ? parseInt(form.intervalDays) : undefined,
+        nextDueDate,
+        autoInvoice:   form.autoInvoice || undefined,
       });
-      setForm({ poolId:"", title:"", description:"", priority:"normal", category:"repair", estimatedCost:"", scheduledAt:"", assignedTo:"" });
+      setForm({ poolId:"", title:"", description:"", priority:"normal", category:"repair", estimatedCost:"", scheduledAt:"", assignedTo:"", recurring:false, intervalDays:"30", autoInvoice:false });
       setShowNew(false);
     } catch (e: any) { setFormError(e.message); }
   };
@@ -164,13 +172,25 @@ export default function WorkOrdersPage() {
     updateWO.mutate(payload);
   };
 
-  const filtered = workOrders.filter(wo =>
-    filter === "all" ? wo.status !== "cancelled" : wo.status === filter
-  );
+  const sevenDays = Date.now() + 7 * 86400000;
+  const filtered = workOrders.filter(wo => {
+    if (filter === "all") return wo.status !== "cancelled";
+    if (filter === "due_soon") {
+      if (wo.status === "complete" || wo.status === "cancelled") return false;
+      const due = wo.next_due_date ?? wo.scheduled_at;
+      return due ? new Date(due).getTime() <= sevenDays : false;
+    }
+    return wo.status === filter;
+  });
 
-  const openCount     = workOrders.filter(w => w.status === "pending" || w.status === "in_progress").length;
-  const urgentCount   = workOrders.filter(w => w.priority === "urgent" && w.status !== "complete" && w.status !== "cancelled").length;
+  const openCount    = workOrders.filter(w => w.status === "pending" || w.status === "in_progress").length;
+  const urgentCount  = workOrders.filter(w => w.priority === "urgent" && w.status !== "complete" && w.status !== "cancelled").length;
   const completeCount = workOrders.filter(w => w.status === "complete").length;
+  const dueSoonCount = workOrders.filter(w => {
+    if (w.status === "complete" || w.status === "cancelled") return false;
+    const due = w.next_due_date ?? w.scheduled_at;
+    return due ? new Date(due).getTime() <= sevenDays : false;
+  }).length;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -250,6 +270,30 @@ export default function WorkOrdersPage() {
               <label className="label">Description</label>
               <textarea className="input" rows={3} placeholder="Describe the work needed, parts required, any client notes…" value={form.description} onChange={set("description")} />
             </div>
+            {/* Recurring options */}
+            <div className="col-span-2 border-t border-slate-100 pt-4">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input type="checkbox" className="w-4 h-4 accent-pool-500" checked={form.recurring}
+                  onChange={e => setForm(p => ({ ...p, recurring: e.target.checked }))} />
+                <span className="text-sm font-medium text-slate-700">Recurring work order</span>
+              </label>
+              {form.recurring && (
+                <div className="mt-3 grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="label">Repeat every (days)</label>
+                    <input type="number" className="input" min="1" value={form.intervalDays}
+                      onChange={e => setForm(p => ({ ...p, intervalDays: e.target.value }))} />
+                  </div>
+                  <div className="flex items-end pb-1">
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <input type="checkbox" className="w-4 h-4 accent-pool-500" checked={form.autoInvoice}
+                        onChange={e => setForm(p => ({ ...p, autoInvoice: e.target.checked }))} />
+                      <span className="text-sm font-medium text-slate-700">Auto-invoice on completion</span>
+                    </label>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
           <div className="flex gap-2">
             <button onClick={handleCreate} disabled={createWO.isPending} className="btn-primary flex-1">
@@ -261,11 +305,17 @@ export default function WorkOrdersPage() {
       )}
 
       {/* Filter tabs */}
-      <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit">
-        {(["all","pending","in_progress","complete"] as const).map(f => (
-          <button key={f} onClick={() => setFilter(f)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all capitalize ${filter === f ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>
-            {f === "in_progress" ? "In Progress" : f.charAt(0).toUpperCase()+f.slice(1)}
+      <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit flex-wrap">
+        {([
+          { key: "all",         label: "All" },
+          { key: "pending",     label: "Pending" },
+          { key: "in_progress", label: "In Progress" },
+          { key: "complete",    label: "Complete" },
+          { key: "due_soon",    label: dueSoonCount > 0 ? `Due Soon (${dueSoonCount})` : "Due Soon" },
+        ] as const).map(f => (
+          <button key={f.key} onClick={() => setFilter(f.key)}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${filter === f.key ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"} ${f.key === "due_soon" && dueSoonCount > 0 ? "text-amber-600" : ""}`}>
+            {f.label}
           </button>
         ))}
       </div>
@@ -296,12 +346,15 @@ export default function WorkOrdersPage() {
                       <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${pb.color}`}>{pb.label}</span>
                       <span className={si.color}>{si.label}</span>
                       <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full capitalize">{wo.category}</span>
+                      {wo.recurring && <span className="text-xs bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full font-medium">↺ Recurring</span>}
                     </div>
                     <p className="font-semibold text-slate-900 truncate">{wo.title}</p>
                     <p className="text-xs text-slate-400 mt-0.5">
                       {wo.pool_name} · {wo.client_name}
                       {wo.scheduled_at && ` · Scheduled ${new Date(wo.scheduled_at).toLocaleDateString()}`}
+                      {wo.next_due_date && ` · Due ${new Date(wo.next_due_date).toLocaleDateString()}`}
                       {wo.estimated_cost && ` · Est. $${wo.estimated_cost}`}
+                      {wo.interval_days && ` · Every ${wo.interval_days}d`}
                     </p>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
