@@ -6,6 +6,7 @@ import { useGPS } from "@/hooks/useGPS";
 import { usePools } from "@/hooks/useData";
 import { useAuth } from "@/contexts/AuthContext";
 import Link from "next/link";
+import { StopCompletionModal } from "@/components/StopCompletionModal";
 
 const P_STYLES = {
   critical: { border: "border-red-200 bg-red-50",    badge: "bg-red-100 text-red-700"    },
@@ -55,6 +56,9 @@ export default function SmartRoutesPage() {
   const [arrivedAt,    setArrivedAt]   = useState<Record<number, number>>({});
   const [stopDuration, setStopDuration] = useState<Record<number, number>>({});
   const [now,          setNow]          = useState(Date.now());
+
+  // Stop completion modal
+  const [activeCompletion, setActiveCompletion] = useState<number | null>(null);
 
   // Quick chemistry log per stop
   const [chemForms,    setChemForms]   = useState<Record<number, { cl: string; ph: string; ta: string }>>({});
@@ -111,15 +115,27 @@ export default function SmartRoutesPage() {
   const markComplete = (stopId: number) => {
     const elapsed = arrivedAt[stopId] ? Math.round((Date.now() - arrivedAt[stopId]) / 60000) : 0;
     if (elapsed > 0) setStopDuration(p => ({ ...p, [stopId]: elapsed }));
+
+    // Capture next stop before state update so we can auto-advance
+    const nextStop = stops.find(s => s.id !== stopId && s.status !== "complete");
+
     setStops((prev) => {
       const updated = prev.map((s) => s.id === stopId ? { ...s, status: "complete" } : s);
       const nextIdx = updated.findIndex((s) => s.status === "pending");
       if (nextIdx !== -1) updated[nextIdx] = { ...updated[nextIdx], status: "current" };
-      // Check if all stops are now complete
       if (updated.every(s => s.status === "complete")) setRouteComplete(true);
       return updated;
     });
+
     setExpanded(null);
+
+    // Auto-expand next stop after a short delay
+    if (nextStop && !stops.every(s => s.status === "complete" || s.id === stopId)) {
+      setTimeout(() => {
+        setExpanded(nextStop.id);
+        setArrivedAt(p => ({ ...p, [nextStop.id]: Date.now() }));
+      }, 1200);
+    }
   };
 
   const logChemistry = async (stop: any) => {
@@ -207,8 +223,22 @@ export default function SmartRoutesPage() {
     );
   }
 
+  const activeStop = activeCompletion !== null
+    ? stops.find(s => s.id === activeCompletion) ?? null
+    : null;
+
   return (
     <div className="space-y-5 animate-fade-in">
+      {activeStop && (
+        <StopCompletionModal
+          stop={activeStop}
+          onComplete={() => {
+            markComplete(activeCompletion!);
+            setActiveCompletion(null);
+          }}
+          onCancel={() => setActiveCompletion(null)}
+        />
+      )}
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
@@ -499,10 +529,11 @@ export default function SmartRoutesPage() {
                   {s !== "complete" && (
                     <div className="px-4 pb-4">
                       <button
-                        onClick={() => markComplete(stop.id)}
-                        className="w-full btn-primary bg-emerald-500 hover:bg-emerald-600 border-emerald-500 text-sm"
+                        onClick={() => setActiveCompletion(stop.id)}
+                        className="w-full btn-primary bg-emerald-500 hover:bg-emerald-600 border-emerald-500 font-bold"
+                        style={{ minHeight: 52 }}
                       >
-                        <CheckCircle2 className="w-4 h-4" /> Mark Stop Complete
+                        <CheckCircle2 className="w-5 h-5" /> Complete Stop &amp; Log Report
                       </button>
                     </div>
                   )}

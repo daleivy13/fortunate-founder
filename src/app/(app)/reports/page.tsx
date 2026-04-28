@@ -3,6 +3,8 @@
 import { useState, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { FileText, Plus, CheckCircle2, Send, Download, Camera, Loader2, ArrowLeft, X, WifiOff, Star } from "lucide-react";
+import { VoiceButton } from "@/components/VoiceButton";
+import { NumberStepper } from "@/components/NumberStepper";
 import { useReports, useCreateReport, usePools } from "@/hooks/useData";
 import { useAuth } from "@/contexts/AuthContext";
 import Link from "next/link";
@@ -380,23 +382,11 @@ function NewReportForm({ onBack, defaultPoolId }: { onBack: () => void; defaultP
                 {pools.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="label">Free Chlorine (ppm)</label>
-                <input type="number" className="input" placeholder="2.0" value={cl} onChange={(e) => setCl(e.target.value)} step="0.1" />
-              </div>
-              <div>
-                <label className="label">pH Level</label>
-                <input type="number" className="input" placeholder="7.4" value={ph} onChange={(e) => setPh(e.target.value)} step="0.1" />
-              </div>
-              <div>
-                <label className="label">Total Alkalinity</label>
-                <input type="number" className="input" placeholder="100" value={ta} onChange={(e) => setTa(e.target.value)} />
-              </div>
-              <div>
-                <label className="label">Water Temp (°F)</label>
-                <input type="number" className="input" placeholder="82" value={temp} onChange={(e) => setTemp(e.target.value)} />
-              </div>
+            <div className="grid grid-cols-2 gap-5 pt-1">
+              <NumberStepper label="Free Chlorine" unit="ppm" value={cl}   onChange={setCl}   step={0.1} min={0} max={20}  decimals={1} size="sm" />
+              <NumberStepper label="pH Level"               value={ph}   onChange={setPh}   step={0.1} min={6} max={9}   decimals={1} size="sm" />
+              <NumberStepper label="Total Alkalinity" unit="ppm" value={ta}  onChange={setTa}   step={5}   min={0} max={400} decimals={0} size="sm" />
+              <NumberStepper label="Water Temp" unit="°F"   value={temp} onChange={setTemp} step={1}   min={40} max={115} decimals={0} size="sm" />
             </div>
           </div>
 
@@ -408,13 +398,14 @@ function NewReportForm({ onBack, defaultPoolId }: { onBack: () => void; defaultP
                 <button
                   key={key}
                   onClick={() => toggle(key as keyof typeof checks)}
-                  className={`w-full flex items-center gap-3 p-3 rounded-xl border text-sm font-medium transition-all text-left ${
+                  className={`w-full flex items-center gap-3 px-4 rounded-2xl border-2 text-sm font-semibold transition-all text-left touch-manipulation select-none ${
                     checks[key as keyof typeof checks]
-                      ? "bg-emerald-50 border-emerald-300 text-emerald-800"
-                      : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                      ? "bg-emerald-50 border-emerald-400 text-emerald-800"
+                      : "bg-white border-slate-200 text-slate-600 active:bg-slate-50"
                   }`}
+                  style={{ minHeight: 52 }}
                 >
-                  <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all ${
+                  <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center flex-shrink-0 transition-all ${
                     checks[key as keyof typeof checks] ? "bg-emerald-500 border-emerald-500" : "border-slate-300"
                   }`}>
                     {checks[key as keyof typeof checks] && <span className="text-white text-xs font-bold">✓</span>}
@@ -430,12 +421,17 @@ function NewReportForm({ onBack, defaultPoolId }: { onBack: () => void; defaultP
           {/* Issues */}
           <div className="card p-5">
             <h2 className="font-bold text-slate-900 mb-3">Issues Found</h2>
-            <input
-              className="input"
-              placeholder="pH high, algae starting, equipment issue..."
-              value={issues}
-              onChange={(e) => setIssues(e.target.value)}
-            />
+            <div className="flex gap-2 items-start">
+              <textarea
+                className="input flex-1 resize-none"
+                rows={2}
+                placeholder="pH high, algae starting, equipment issue..."
+                value={issues}
+                onChange={(e) => setIssues(e.target.value)}
+                style={{ fontSize: 16 }}
+              />
+              <VoiceButton onResult={text => setIssues(p => p ? `${p} ${text}` : text)} className="mt-0.5" />
+            </div>
           </div>
 
           {/* Chemical Dosage Log */}
@@ -495,14 +491,20 @@ function NewReportForm({ onBack, defaultPoolId }: { onBack: () => void; defaultP
 
           {/* Notes */}
           <div className="card p-5">
-            <h2 className="font-bold text-slate-900 mb-3">Tech Notes</h2>
-            <textarea
-              className="input resize-none"
-              rows={4}
-              placeholder="Observations, equipment issues, customer requests..."
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-            />
+            <h2 className="font-bold text-slate-900 mb-3">
+              Tech Notes <span className="text-slate-400 font-normal text-sm">— tap mic to speak</span>
+            </h2>
+            <div className="flex gap-2 items-start">
+              <textarea
+                className="input flex-1 resize-none"
+                rows={4}
+                placeholder="Observations, equipment issues, customer requests..."
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                style={{ fontSize: 16 }}
+              />
+              <VoiceButton onResult={text => setNotes(p => p ? `${p} ${text}` : text)} className="mt-0.5" />
+            </div>
           </div>
 
           {/* Photos */}
