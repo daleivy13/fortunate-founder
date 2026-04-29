@@ -11,10 +11,15 @@ const CreateWOSchema = z.object({
   title:         z.string().min(1).max(200),
   description:   z.string().max(2000).optional(),
   priority:      z.enum(["low","normal","high","urgent"]).default("normal"),
-  category:      z.enum(["repair","replacement","upgrade","inspection","other"]).default("repair"),
+  category:      z.enum(["repair","replacement","upgrade","inspection","other","recurring_maintenance","equipment_install","chemical_treatment","emergency"]).default("repair"),
   estimatedCost: z.number().optional(),
   scheduledAt:   z.string().optional(),
   assignedTo:    z.string().optional(),
+  recurring:     z.boolean().optional(),
+  intervalDays:  z.number().int().positive().optional(),
+  nextDueDate:   z.string().optional(),
+  autoInvoice:   z.boolean().optional(),
+  checklist:     z.array(z.object({ text: z.string(), done: z.boolean().default(false) })).optional(),
 });
 
 const UpdateWOSchema = z.object({
@@ -28,6 +33,7 @@ const UpdateWOSchema = z.object({
   priority:    z.enum(["low","normal","high","urgent"]).optional(),
   assignedTo:  z.string().optional(),
   invoiceId:   z.number().int().positive().optional(),
+  checklist:   z.array(z.object({ text: z.string(), done: z.boolean() })).optional(),
 });
 
 export async function GET(req: NextRequest) {
@@ -52,10 +58,26 @@ export async function GET(req: NextRequest) {
     ORDER BY
       CASE wo.priority WHEN 'urgent' THEN 1 WHEN 'high' THEN 2 WHEN 'normal' THEN 3 ELSE 4 END,
       wo.created_at DESC
-    LIMIT 100
+    LIMIT 200
   `);
 
-  return NextResponse.json({ workOrders: rows });
+  const today    = new Date(); today.setHours(0,0,0,0);
+  const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate()+1);
+  const in7days  = new Date(today); in7days.setDate(in7days.getDate()+7);
+
+  const workOrders = (rows.rows as any[]).map(wo => {
+    const due = wo.next_due_date ? new Date(wo.next_due_date) : wo.scheduled_at ? new Date(wo.scheduled_at) : null;
+    let urgency = "scheduled";
+    if (due) {
+      if (due < today)          urgency = "overdue";
+      else if (+due === +today) urgency = "due_today";
+      else if (+due <= +tomorrow) urgency = "due_tomorrow";
+      else if (+due <= +in7days)  urgency = "upcoming";
+    }
+    return { ...wo, urgency };
+  });
+
+  return NextResponse.json({ workOrders });
 }
 
 export async function POST(req: NextRequest) {
@@ -65,17 +87,40 @@ export async function POST(req: NextRequest) {
   const { data, error: ve } = await validateBody(CreateWOSchema, await req.json());
   if (ve) return ve;
 
+  const nextDue = data.nextDueDate
+    ? new Date(data.nextDueDate)
+    : data.scheduledAt
+    ? new Date(data.scheduledAt)
+    : new Date(Date.now() + 86400000); // default: tomorrow
+
   const result = await db.execute(sql`
-    INSERT INTO work_orders (company_id, pool_id, title, description, priority, category, estimated_cost, scheduled_at, assigned_to)
+    INSERT INTO work_orders (
+      company_id, pool_id, title, description, priority, category,
+      estimated_cost, scheduled_at, assigned_to,
+      recurring, interval_days, next_due_date, auto_invoice, checklist
+    )
     VALUES (
       ${data.companyId}, ${data.poolId}, ${data.title},
       ${data.description ?? null}, ${data.priority}, ${data.category},
       ${data.estimatedCost ?? null},
       ${data.scheduledAt ? new Date(data.scheduledAt) : null},
-      ${data.assignedTo ?? null}
+      ${data.assignedTo ?? null},
+      ${data.recurring ?? false},
+      ${data.intervalDays ?? null},
+      ${nextDue.toISOString()},
+      ${data.autoInvoice ?? false},
+      ${data.checklist ? JSON.stringify(data.checklist) : '[]'}
     )
     RETURNING *
-  `);
+  `).catch(() =>
+    // Fallback if recurring/checklist columns don't exist yet — run SQL migration in Neon
+    db.execute(sql`
+      INSERT INTO work_orders (company_id, pool_id, title, description, priority, category, estimated_cost, scheduled_at, assigned_to)
+      VALUES (${data.companyId}, ${data.poolId}, ${data.title}, ${data.description ?? null}, ${data.priority}, ${data.category},
+        ${data.estimatedCost ?? null}, ${data.scheduledAt ? new Date(data.scheduledAt) : null}, ${data.assignedTo ?? null})
+      RETURNING *
+    `)
+  );
 
   const wo = result.rows[0] as any;
 
@@ -130,12 +175,59 @@ export async function PATCH(req: NextRequest) {
       assigned_to  = COALESCE(${rest.assignedTo ?? null}, assigned_to),
       photos       = COALESCE(${photos ? JSON.stringify(photos) : null}, photos),
       completed_at = COALESCE(${rest.completedAt ? new Date(rest.completedAt).toISOString() : null}::timestamp, completed_at),
-      invoice_id   = COALESCE(${rest.invoiceId ?? null}, invoice_id)
+      invoice_id   = COALESCE(${rest.invoiceId ?? null}, invoice_id),
+      checklist    = COALESCE(${data.checklist ? JSON.stringify(data.checklist) : null}::jsonb, checklist)
     WHERE id = ${id}
     RETURNING *
-  `);
+  `).catch(() =>
+    db.execute(sql`
+      UPDATE work_orders SET
+        status = COALESCE(${rest.status ?? null}, status),
+        priority = COALESCE(${rest.priority ?? null}, priority),
+        completed_at = COALESCE(${rest.completedAt ? new Date(rest.completedAt).toISOString() : null}::timestamp, completed_at)
+      WHERE id = ${id} RETURNING *
+    `)
+  );
 
-  return NextResponse.json({ workOrder: updateResult.rows[0] });
+  const wo = updateResult.rows[0] as any;
+
+  // On completion: handle recurring advance + auto-invoice
+  if (rest.status === "complete" && wo) {
+    // If recurring, advance next_due_date
+    if (wo.recurring && wo.interval_days) {
+      const nextDue = new Date(Date.now() + parseInt(wo.interval_days) * 86400000);
+      await db.execute(sql`
+        UPDATE work_orders SET
+          last_completed_at = NOW(),
+          next_due_date = ${nextDue.toISOString()}::timestamp,
+          status = 'active'
+        WHERE id = ${id}
+      `).catch(() => {});
+    }
+
+    // Auto-invoice on completion
+    if (wo.auto_invoice && wo.estimated_cost) {
+      try {
+        const poolRows = await db.execute(sql`SELECT * FROM pools WHERE id = ${wo.pool_id} LIMIT 1`);
+        const pool = poolRows.rows[0] as any;
+        if (pool) {
+          const dueDate = new Date(Date.now() + 7 * 86400000);
+          await db.execute(sql`
+            INSERT INTO invoices (company_id, pool_id, client_name, client_email, amount, status, due_date, line_items, notes)
+            VALUES (
+              ${wo.company_id}, ${wo.pool_id}, ${pool.client_name}, ${pool.client_email ?? null},
+              ${wo.estimated_cost}, 'draft',
+              ${dueDate.toISOString().slice(0,10)},
+              ${JSON.stringify([{ description: wo.title, quantity: 1, unitPrice: parseFloat(wo.estimated_cost), total: parseFloat(wo.estimated_cost) }])},
+              ${'Auto-generated from completed work order: ' + wo.title}
+            )
+          `);
+        }
+      } catch {}
+    }
+  }
+
+  return NextResponse.json({ workOrder: wo });
 }
 
 export async function DELETE(req: NextRequest) {
