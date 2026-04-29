@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
-import { Receipt, Plus, Send, DollarSign, Clock, CheckCircle2, AlertCircle, Loader2, RefreshCw } from "lucide-react";
+import { Receipt, Plus, Send, DollarSign, Clock, CheckCircle2, AlertCircle, Loader2, RefreshCw, FileDown } from "lucide-react";
 import { useInvoices, useCreateInvoice, useUpdateInvoice } from "@/hooks/useData";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePools } from "@/hooks/useData";
@@ -23,6 +23,8 @@ export default function InvoicesPage() {
   const { company } = useAuth();
   const [runningBilling, setRunningBilling] = useState(false);
   const [billingRan, setBillingRan] = useState(false);
+  const [sendingPdf, setSendingPdf] = useState<number | null>(null);
+  const [pdfSuccess, setPdfSuccess] = useState<Set<number>>(new Set());
 
   const { data: autoBillingData } = useQuery({
     queryKey: ["auto-billing", company?.id],
@@ -83,6 +85,18 @@ export default function InvoicesPage() {
     const data = await res.json();
     if (data.paymentUrl) window.open(data.paymentUrl, "_blank");
     updateInvoice.mutate({ id: inv.id, status: "sent" });
+  };
+
+  const sendWithPdf = async (inv: any) => {
+    setSendingPdf(inv.id);
+    try {
+      const res = await fetch(`/api/invoices/${inv.id}/send`, { method: "POST" });
+      if (res.ok) {
+        setPdfSuccess(p => new Set([...p, inv.id]));
+        updateInvoice.mutate({ id: inv.id, status: "sent" });
+      }
+    } catch {}
+    setSendingPdf(null);
   };
 
   const markPaid = (id: number) => updateInvoice.mutate({ id, action: "mark_paid" });
@@ -256,37 +270,55 @@ export default function InvoicesPage() {
                   </div>
                 )}
 
-                {inv.status !== "paid" && (
-                  <div className="flex gap-2 mt-3 pt-3 border-t border-slate-100">
-                    {inv.status === "draft" && (
-                      <button
-                        onClick={() => sendInvoice(inv)}
-                        disabled={updateInvoice.isPending}
-                        className="btn-primary text-sm flex-1"
-                      >
-                        <Send className="w-3.5 h-3.5" /> Send Invoice
-                      </button>
-                    )}
-                    {(inv.status === "sent" || inv.status === "overdue") && (
-                      <>
+                <div className="flex gap-2 mt-3 pt-3 border-t border-slate-100 flex-wrap">
+                  {/* Download PDF — always available */}
+                  <a href={`/api/invoices/${inv.id}/pdf`} target="_blank" rel="noreferrer">
+                    <button className="btn-outline text-sm flex items-center gap-1.5">
+                      <FileDown className="w-3.5 h-3.5" /> PDF
+                    </button>
+                  </a>
+
+                  {inv.status !== "paid" && (
+                    <>
+                      {inv.status === "draft" && (
                         <button
-                          onClick={() => sendInvoice(inv)}
-                          disabled={updateInvoice.isPending}
-                          className="btn-secondary text-sm"
+                          onClick={() => sendWithPdf(inv)}
+                          disabled={sendingPdf === inv.id}
+                          className="btn-primary text-sm flex-1 flex items-center gap-1.5 justify-center"
                         >
-                          Resend
+                          {sendingPdf === inv.id
+                            ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Generating PDF…</>
+                            : pdfSuccess.has(inv.id)
+                            ? <><CheckCircle2 className="w-3.5 h-3.5" /> ✓ PDF attached & sent</>
+                            : <><Send className="w-3.5 h-3.5" /> Send with PDF</>
+                          }
                         </button>
-                        <button
-                          onClick={() => markPaid(inv.id)}
-                          disabled={updateInvoice.isPending}
-                          className="btn-primary text-sm flex-1"
-                        >
-                          <CheckCircle2 className="w-3.5 h-3.5" /> Mark as Paid
-                        </button>
-                      </>
-                    )}
-                  </div>
-                )}
+                      )}
+                      {(inv.status === "sent" || inv.status === "overdue") && (
+                        <>
+                          <button
+                            onClick={() => sendWithPdf(inv)}
+                            disabled={sendingPdf === inv.id}
+                            className="btn-secondary text-sm flex items-center gap-1.5"
+                          >
+                            {sendingPdf === inv.id
+                              ? <Loader2 className="w-3 h-3 animate-spin" />
+                              : <Send className="w-3 h-3" />
+                            }
+                            Resend PDF
+                          </button>
+                          <button
+                            onClick={() => markPaid(inv.id)}
+                            disabled={updateInvoice.isPending}
+                            className="btn-primary text-sm flex-1 flex items-center gap-1.5 justify-center"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Mark as Paid
+                          </button>
+                        </>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
             );
           })}
