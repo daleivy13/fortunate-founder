@@ -14,6 +14,7 @@ import OfflineBanner from "@/components/OfflineBanner";
 const NAV = [
   { href: "/dashboard",  label: "Dashboard",   icon: LayoutDashboard, group: "main" },
   { href: "/pools",      label: "Pools",        icon: Waves,           group: "main" },
+  { href: "/equipment",  label: "Equipment",    icon: Wrench,          group: "main" },
   { href: "/chemistry",  label: "Chemistry AI", icon: FlaskConical,    group: "main" },
   { href: "/routes",     label: "Routes & GPS", icon: MapPin,          group: "main" },
   { href: "/reports",    label: "Reports",      icon: FileText,        group: "main" },

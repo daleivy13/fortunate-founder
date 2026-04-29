@@ -6,17 +6,30 @@ import { requireAuth } from "@/lib/auth";
 import { z } from "zod";
 import { validateBody } from "@/lib/validation";
 
+const CATEGORY_KEYS = [
+  "pump_standard","pump_variable_speed","filter_cartridge","filter_de","filter_sand",
+  "heater_gas","heat_pump","salt_cell","chlorinator","automation_system",
+  "pool_cleaner_robot","pool_cleaner_pressure","pool_cleaner_suction",
+  "pool_light","pool_cover","uv_system","ozonator",
+  // Legacy keys kept for backward compat
+  "pump","filter","heater","light","cleaner","other",
+] as const;
+
 const CreateEquipmentSchema = z.object({
   poolId:              z.number().int().positive(),
-  category:            z.enum(["pump","filter","heater","salt_cell","light","cleaner","other"]),
+  name:                z.string().max(200).optional(),
+  category:            z.string().max(60),
   brand:               z.string().max(100).optional(),
   model:               z.string().max(200).optional(),
   serialNumber:        z.string().max(100).optional(),
   installedAt:         z.string().optional(),
   warrantyExp:         z.string().optional(),
+  warrantyExpires:     z.string().optional(),
   lastServicedAt:      z.string().optional(),
-  serviceIntervalDays: z.string().optional(),
+  serviceIntervalDays: z.union([z.string(), z.number()]).optional(),
+  condition:           z.enum(["excellent","good","fair","poor"]).optional(),
   notes:               z.string().max(1000).optional(),
+  photos:              z.array(z.string()).optional(),
 });
 
 const UpdateEquipmentSchema = z.object({
@@ -25,27 +38,83 @@ const UpdateEquipmentSchema = z.object({
   serviceIntervalDays: z.number().int().optional(),
   brand:               z.string().max(100).optional(),
   model:               z.string().max(200).optional(),
+  condition:           z.enum(["excellent","good","fair","poor"]).optional(),
   notes:               z.string().max(1000).optional(),
+  photos:              z.array(z.string()).optional(),
+  logService:          z.boolean().optional(),
 });
+
+function computeAlerts(eq: any) {
+  const now = Date.now();
+  const alerts: string[] = [];
+
+  // Warranty expiring soon
+  if (eq.warranty_exp || eq.warranty_expires) {
+    const exp = new Date(eq.warranty_exp ?? eq.warranty_expires).getTime();
+    const daysLeft = Math.floor((exp - now) / 86400000);
+    if (daysLeft >= 0 && daysLeft <= 30) alerts.push(`Warranty expires in ${daysLeft}d`);
+    else if (daysLeft < 0) alerts.push("Warranty expired");
+  }
+
+  // Service overdue
+  if (eq.last_serviced_at && eq.service_interval_days) {
+    const nextService = new Date(eq.last_serviced_at).getTime() + parseInt(eq.service_interval_days) * 86400000;
+    const daysLeft = Math.floor((nextService - now) / 86400000);
+    if (daysLeft < 0) alerts.push(`Service overdue by ${Math.abs(daysLeft)}d`);
+    else if (daysLeft <= 14) alerts.push(`Service due in ${daysLeft}d`);
+  }
+
+  return alerts;
+}
+
+function computeDaysLeft(eq: any): number | null {
+  if (!eq.last_serviced_at || !eq.service_interval_days) return null;
+  const nextService = new Date(eq.last_serviced_at).getTime() + parseInt(eq.service_interval_days) * 86400000;
+  return Math.floor((nextService - Date.now()) / 86400000);
+}
 
 export async function GET(req: NextRequest) {
   const { auth, error } = await requireAuth(req);
   if (error) return error;
 
-  const poolId = parseInt(new URL(req.url).searchParams.get("poolId") ?? "");
-  if (!poolId) return NextResponse.json({ error: "poolId required" }, { status: 400 });
+  const { searchParams } = new URL(req.url);
+  const poolId    = searchParams.get("poolId");
+  const companyId = searchParams.get("companyId");
 
-  // Use raw SQL to pick up maintenance columns (last_serviced_at, service_interval_days) if they exist
-  let equipment: any[];
+  if (!poolId && !companyId) return NextResponse.json({ error: "poolId or companyId required" }, { status: 400 });
+
+  let rows: any[];
   try {
-    const result = await db.execute(sql`
-      SELECT * FROM pool_equipment WHERE pool_id = ${poolId} AND is_active = true ORDER BY created_at DESC
-    `);
-    equipment = result.rows as any[];
+    if (companyId) {
+      const result = await db.execute(sql`
+        SELECT pe.*, p.name AS pool_name, p.client_name, p.company_id
+        FROM pool_equipment pe
+        JOIN pools p ON pe.pool_id = p.id
+        WHERE p.company_id = ${parseInt(companyId)} AND pe.is_active = true
+        ORDER BY pe.created_at DESC
+      `);
+      rows = result.rows as any[];
+    } else {
+      const result = await db.execute(sql`
+        SELECT * FROM pool_equipment WHERE pool_id = ${parseInt(poolId!)} AND is_active = true ORDER BY created_at DESC
+      `);
+      rows = result.rows as any[];
+    }
   } catch {
-    equipment = await db.select().from(poolEquipment)
-      .where(and(eq(poolEquipment.poolId, poolId), eq(poolEquipment.isActive, true)));
+    const conditions = companyId
+      ? and(eq(poolEquipment.isActive, true))
+      : and(eq(poolEquipment.poolId, parseInt(poolId!)), eq(poolEquipment.isActive, true));
+    const base = await db.select().from(poolEquipment).where(conditions);
+    rows = base;
   }
+
+  const equipment = rows.map(eq => ({
+    ...eq,
+    poolId:    eq.pool_id ?? eq.poolId,
+    poolName:  eq.pool_name,
+    alerts:    computeAlerts(eq),
+    daysLeft:  computeDaysLeft(eq),
+  }));
 
   return NextResponse.json({ equipment });
 }
@@ -57,7 +126,9 @@ export async function POST(req: NextRequest) {
   const { data, error: ve } = await validateBody(CreateEquipmentSchema, await req.json());
   if (ve) return ve;
 
-  // Insert base fields via Drizzle, then set new maintenance columns via raw SQL if present
+  const warrantyDate = data.warrantyExp ?? data.warrantyExpires;
+  const svcInterval  = data.serviceIntervalDays ? parseInt(String(data.serviceIntervalDays)) : null;
+
   const [item] = await db.insert(poolEquipment).values({
     poolId:       data.poolId,
     category:     data.category,
@@ -65,19 +136,22 @@ export async function POST(req: NextRequest) {
     model:        data.model ?? null,
     serialNumber: data.serialNumber ?? null,
     installedAt:  data.installedAt ? new Date(data.installedAt) : null,
-    warrantyExp:  data.warrantyExp ? new Date(data.warrantyExp) : null,
+    warrantyExp:  warrantyDate ? new Date(warrantyDate) : null,
     notes:        data.notes ?? null,
   }).returning();
 
-  if ((data.lastServicedAt || data.serviceIntervalDays) && item?.id) {
+  if (item?.id) {
     try {
       await db.execute(sql`
         UPDATE pool_equipment SET
+          name                  = COALESCE(${data.name ?? null}, name),
           last_serviced_at      = COALESCE(${data.lastServicedAt ? new Date(data.lastServicedAt) : null}::timestamp, last_serviced_at),
-          service_interval_days = COALESCE(${data.serviceIntervalDays ? parseInt(data.serviceIntervalDays) : null}::int, service_interval_days)
+          service_interval_days = COALESCE(${svcInterval}::int, service_interval_days),
+          condition             = COALESCE(${data.condition ?? null}, condition),
+          photos                = COALESCE(${data.photos ? JSON.stringify(data.photos) : null}::jsonb, photos)
         WHERE id = ${item.id}
       `);
-    } catch { /* columns may not exist yet — safe to ignore */ }
+    } catch { /* extended columns not yet in DB — run SQL migration in Neon */ }
   }
 
   return NextResponse.json({ equipment: item }, { status: 201 });
@@ -97,17 +171,19 @@ export async function PATCH(req: NextRequest) {
     await db.update(poolEquipment).set(rest).where(eq(poolEquipment.id, id));
   }
 
-  // Maintenance columns via raw SQL (added manually in Neon)
-  if (lastServicedAt !== undefined || serviceIntervalDays !== undefined) {
-    try {
-      await db.execute(sql`
-        UPDATE pool_equipment SET
-          last_serviced_at      = COALESCE(${lastServicedAt ? new Date(lastServicedAt) : null}::timestamp, last_serviced_at),
-          service_interval_days = COALESCE(${serviceIntervalDays ?? null}::int, service_interval_days)
-        WHERE id = ${id}
-      `);
-    } catch { /* columns not yet created — skip gracefully */ }
-  }
+  // Extended columns via raw SQL
+  try {
+    await db.execute(sql`
+      UPDATE pool_equipment SET
+        last_serviced_at      = CASE WHEN ${data.logService ?? false} THEN NOW()
+                                     WHEN ${lastServicedAt ?? null}::timestamp IS NOT NULL THEN ${lastServicedAt ? new Date(lastServicedAt) : null}::timestamp
+                                     ELSE last_serviced_at END,
+        service_interval_days = COALESCE(${serviceIntervalDays ?? null}::int, service_interval_days),
+        condition             = COALESCE(${data.condition ?? null}, condition),
+        photos                = COALESCE(${data.photos ? JSON.stringify(data.photos) : null}::jsonb, photos)
+      WHERE id = ${id}
+    `);
+  } catch { /* extended columns not in DB yet */ }
 
   const result = await db.execute(sql`SELECT * FROM pool_equipment WHERE id = ${id}`);
   return NextResponse.json({ equipment: result.rows[0] });
