@@ -15,7 +15,16 @@
       "Bash(awk -F\"'\" '{print $2}')",
       "Bash(grep -rn \"fetch\\\\\\(\\\\`/api\\\\|fetch\\('/api\\\\|fetch\\(\\\\\"/api\" src/app/\\\\\\(app\\\\\\) --include=\"*.tsx\")",
       "Bash(grep -oP \"\\(?<=fetch\\\\\\(\\)['\\\\`]/api[^'\\\\`\\\\\"]*\")",
-      "Bash([ -f \"src/app/$route/route.ts\" ])"
+      "Bash([ -f \"src/app/$route/route.ts\" ])",
+      "Bash(curl -s http://localhost:3000)",
+      "Bash(copy \"C:\\\\Users\\\\User\\\\Downloads\\\\ChatGPT Image Apr 19, 2026, 03_37_27 PM.png\" \"C:\\\\dev\\\\my-projects\\\\fortunate-founder\\\\public\\\\logo.png\")",
+      "Bash(copy \"C:\\\\Users\\\\User\\\\Downloads\\\\ChatGPT Image Apr 19, 2026, 03_37_27 PM.png\" \"C:\\\\dev\\\\my-projects\\\\fortunate-founder\\\\public\\\\icon.png\")",
+      "Bash(cp \"/mnt/c/Users/User/Downloads/ChatGPT Image Apr 19, 2026, 03_37_27 PM.png\" /mnt/c/dev/my-projects/fortunate-founder/public/logo.png)",
+      "Bash(cp \"/mnt/c/Users/User/Downloads/ChatGPT Image Apr 19, 2026, 03_37_27 PM.png\" /mnt/c/dev/my-projects/fortunate-founder/public/icon.png)",
+      "Bash(git reset *)",
+      "Bash(git fetch *)",
+      "Bash(git ls-remote *)",
+      "Bash(git rm *)"
     ]
   }
 }
