@@ -7,7 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import {
   LayoutDashboard, Waves, FlaskConical, MapPin,
   FileText, Users, Receipt, BarChart3, LogOut,
-  Settings, Bell, ChevronRight, Menu, X, Package, Upload, Gift, Wrench, ShoppingCart,
+  Settings, Bell, ChevronRight, Menu, X, Package, Upload, Gift, Wrench, ShoppingCart, Shield,
 } from "lucide-react";
 import OfflineBanner from "@/components/OfflineBanner";
 
@@ -23,6 +23,7 @@ const NAV = [
   { href: "/work-orders",label: "Work Orders",  icon: Wrench,          group: "business" },
   { href: "/invoices",   label: "Invoices",     icon: Receipt,         group: "business" },
   { href: "/employees",  label: "Employees",    icon: Users,           group: "business" },
+  { href: "/compliance", label: "Compliance",    icon: Shield,          group: "business" },
   { href: "/analytics",  label: "Analytics",    icon: BarChart3,       group: "business" },
   { href: "/referral",   label: "Refer & Earn", icon: Gift,            group: "business" },
   { href: "/import",     label: "Import",       icon: Upload,          group: "business" },
