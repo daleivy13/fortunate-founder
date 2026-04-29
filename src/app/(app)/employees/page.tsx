@@ -1,10 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Users, Plus, Phone, Mail, Star, Loader2, X } from "lucide-react";
+import { Users, Plus, Phone, Mail, Star, Loader2, X, TrendingUp } from "lucide-react";
 import { useEmployees, useCreateEmployee, useUpdateEmployee, useDeleteEmployee } from "@/hooks/useData";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
+import { getEffectiveLevel, getLevelLabel, getLevelColor, getDaysToNextLevel } from "@/lib/tech-experience";
+import Link from "next/link";
 
 const AVATAR_COLORS = [
   "from-pool-500 to-[#00c3e3]",
@@ -181,6 +183,28 @@ export default function EmployeesPage() {
                   );
                 })()}
 
+                {/* Experience level */}
+                {(() => {
+                  const level   = getEffectiveLevel({ id: emp.id, experienceLevel: emp.experienceLevel, startedDate: emp.startedDate, servicesCompleted: emp.servicesCompleted, equipmentTrainedOn: emp.equipmentTrainedOn });
+                  const { label: progressLabel, pct } = getDaysToNextLevel({ id: emp.id, experienceLevel: emp.experienceLevel, startedDate: emp.startedDate, servicesCompleted: emp.servicesCompleted });
+                  return (
+                    <div className="mt-3 pt-3 border-t border-slate-100">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${getLevelColor(level)}`}>{getLevelLabel(level)}</span>
+                        <span className="text-xs text-slate-400">{emp.servicesCompleted ?? 0} services</span>
+                      </div>
+                      {pct < 100 && (
+                        <>
+                          <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div className="h-full bg-[#1756a9] rounded-full transition-all" style={{ width: `${pct}%` }} />
+                          </div>
+                          <p className="text-[10px] text-slate-400 mt-1">{progressLabel}</p>
+                        </>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between">
                   <div>
                     {emp.hourlyRate && (
@@ -193,6 +217,11 @@ export default function EmployeesPage() {
                   <div className="flex gap-2">
                     {emp.isActive !== false && (
                       <>
+                        <Link href={`/employees/${emp.id}`}>
+                          <button className="btn-outline text-xs py-1 px-2.5 flex items-center gap-1">
+                            <TrendingUp className="w-3 h-3" /> Profile
+                          </button>
+                        </Link>
                         <button onClick={() => openEdit(emp)} className="btn-outline text-xs py-1 px-2.5">Edit</button>
                         <button
                           onClick={() => handleDeactivate(emp.id)}
