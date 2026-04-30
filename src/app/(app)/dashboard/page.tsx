@@ -3,7 +3,7 @@
 import { useAuth } from "@/contexts/AuthContext";
 import { usePools, useReports, useInvoices, useMileage } from "@/hooks/useData";
 import { useQuery } from "@tanstack/react-query";
-import { MapPin, AlertTriangle, DollarSign, Car, Waves, CheckCircle2, Clock, PartyPopper, Wrench, CalendarDays, ShoppingCart } from "lucide-react";
+import { MapPin, AlertTriangle, DollarSign, Car, Waves, CheckCircle2, Clock, PartyPopper, Wrench, CalendarDays, ShoppingCart, ShieldAlert } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -97,6 +97,17 @@ export default function DashboardPage() {
   const workOrders: any[] = woData?.workOrders ?? [];
   const openWOs   = workOrders.filter(w => w.status === "pending" || w.status === "in_progress").length;
   const urgentWOs = workOrders.filter(w => w.priority === "urgent" && w.status !== "complete" && w.status !== "cancelled").length;
+
+  const { data: verificationData } = useQuery({
+    queryKey: ["verification-issues", company?.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/reports?companyId=${company!.id}&verificationStatus=review,reject&limit=5`);
+      return res.json();
+    },
+    enabled: !!company?.id,
+    staleTime: 5 * 60 * 1000,
+  });
+  const verificationIssues: any[] = verificationData?.reports ?? [];
   if (urgentWOs > 0) {
     chemAlerts.push({ pool: `${urgentWOs} urgent work order${urgentWOs !== 1 ? "s" : ""}`, msg: "Needs immediate attention", href: "/work-orders" });
   }
@@ -313,6 +324,31 @@ export default function DashboardPage() {
                       <span className="font-bold text-red-600">{overdue60} invoice{overdue60 !== 1 ? "s" : ""}</span>
                     </div>
                   )}
+                </div>
+              </div>
+            </Link>
+          )}
+
+          {/* Verification Issues */}
+          {verificationIssues.length > 0 && (
+            <Link href="/reports">
+              <div className="card p-5 border-red-200 hover:border-red-300 transition-colors cursor-pointer">
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="section-title flex items-center gap-2 text-red-700">
+                    <ShieldAlert className="w-4 h-4 text-red-500" /> Verification Issues
+                  </h2>
+                  <span className="text-xs bg-red-100 text-red-700 font-bold px-2 py-0.5 rounded-full">{verificationIssues.length}</span>
+                </div>
+                <div className="space-y-2">
+                  {verificationIssues.slice(0, 3).map((r: any) => (
+                    <div key={r.id} className="flex items-center gap-2 text-sm">
+                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${r.verificationStatus === "reject" ? "bg-red-500" : "bg-amber-400"}`} />
+                      <span className="truncate text-slate-700">{r.poolName ?? `Report #${r.id}`}</span>
+                      <span className={`ml-auto text-xs font-medium flex-shrink-0 capitalize ${r.verificationStatus === "reject" ? "text-red-600" : "text-amber-600"}`}>
+                        {r.verificationStatus}
+                      </span>
+                    </div>
+                  ))}
                 </div>
               </div>
             </Link>

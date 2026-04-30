@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useTransition, useRef } from "react";
-import { FlaskConical, Zap, AlertTriangle, RefreshCw, Camera, Loader2 } from "lucide-react";
+import { useState, useTransition } from "react";
+import { FlaskConical, Zap, AlertTriangle, RefreshCw } from "lucide-react";
 import { useI18n } from "@/lib/i18n/context";
+import { TestKitScanner, type ScanReadings } from "@/components/TestKitScanner";
 
 interface Dosage { chemical: string; flOz: number | null; lbs: number | null; reason: string; urgency: "critical"|"high"|"normal"; }
 const URGENCY_COLOR = { critical:"bg-red-50 border-red-300 text-red-800", high:"bg-amber-50 border-amber-300 text-amber-800", normal:"bg-emerald-50 border-emerald-300 text-emerald-800" };
@@ -24,44 +25,20 @@ export default function ChemistryPage() {
   const [vals,setVals]=useState({freeChlorine:"0.8",ph:"8.4",totalAlkalinity:"120",calciumHardness:"200",cyanuricAcid:"40",waterTemp:config.unitSystem==="metric"?"28":"82",volumeGallons:config.unitSystem==="metric"?"56000":"15000"});
   const [aiAnalysis,setAiAnalysis]=useState("");
   const [isPending,startTransition]=useTransition();
-  const [scanning,setScanning]=useState(false);
-  const [scanResult,setScanResult]=useState<{confidence:string;flags:string[]} | null>(null);
-  const scanRef=useRef<HTMLInputElement>(null);
+  const [scanResult,setScanResult]=useState<{confidence:string;flags:{param:string;value:number;status:string;unit:string}[];warnings:string[]} | null>(null);
   const dosages=calcDosages(vals);
 
-  const handleScanPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setScanning(true);
-    setScanResult(null);
-    try {
-      const reader = new FileReader();
-      const base64 = await new Promise<string>((resolve, reject) => {
-        reader.onload = () => resolve((reader.result as string).split(",")[1]);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-      const res = await fetch("/api/chemistry/read-photo", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageBase64: base64 }),
-      });
-      const data = await res.json();
-      if (data.readings) {
-        const r = data.readings;
-        setVals(p => ({
-          ...p,
-          ...(r.freeChlorine != null ? { freeChlorine: String(r.freeChlorine) } : {}),
-          ...(r.ph           != null ? { ph: String(r.ph) } : {}),
-          ...(r.totalAlkalinity != null ? { totalAlkalinity: String(r.totalAlkalinity) } : {}),
-          ...(r.calciumHardness != null ? { calciumHardness: String(r.calciumHardness) } : {}),
-          ...(r.cyanuricAcid   != null ? { cyanuricAcid: String(r.cyanuricAcid) } : {}),
-        }));
-        setScanResult({ confidence: data.confidence ?? "medium", flags: data.flags ?? [] });
-      }
-    } catch { /* silently fail */ }
-    setScanning(false);
-    if (scanRef.current) scanRef.current.value = "";
+  const handleScanReadings = (result: { readings: ScanReadings; flags: {param:string;value:number;status:"low"|"high";unit:string}[]; confidence: "high"|"medium"|"low"; warnings: string[] }) => {
+    const r = result.readings;
+    setVals(p => ({
+      ...p,
+      ...(r.freeChlorine     != null ? { freeChlorine:    String(r.freeChlorine)    } : {}),
+      ...(r.ph               != null ? { ph:              String(r.ph)              } : {}),
+      ...(r.totalAlkalinity  != null ? { totalAlkalinity: String(r.totalAlkalinity) } : {}),
+      ...(r.calciumHardness  != null ? { calciumHardness: String(r.calciumHardness) } : {}),
+      ...(r.cyanuricAcid     != null ? { cyanuricAcid:    String(r.cyanuricAcid)    } : {}),
+    }));
+    setScanResult({ confidence: result.confidence, flags: result.flags, warnings: result.warnings });
   };
 
   const FIELDS=[
@@ -90,27 +67,26 @@ export default function ChemistryPage() {
             {config.flag} {config.nameEn} · {config.unitSystem==="metric"?"Metric (mL, L, g)":"Imperial (fl oz, gal, lbs)"}
           </p>
         </div>
-        <div>
-          <input ref={scanRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleScanPhoto} />
-          <button
-            onClick={() => scanRef.current?.click()}
-            disabled={scanning}
-            className="btn-secondary text-sm flex items-center gap-2"
-          >
-            {scanning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
-            {scanning ? "Scanning…" : "📷 Scan Test Kit"}
-          </button>
-        </div>
+        <TestKitScanner onReadings={handleScanReadings} compact />
       </div>
       {scanResult && (
-        <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 space-y-2">
           <p className="text-sm font-semibold text-emerald-800">
-            ✓ Values auto-detected ({scanResult.confidence} confidence) — please verify before treating
+            ✓ Values auto-filled ({scanResult.confidence} confidence) — verify before treating
           </p>
           {scanResult.flags.length > 0 && (
-            <div className="flex flex-wrap gap-2 mt-2">
+            <div className="flex flex-wrap gap-2">
               {scanResult.flags.map((f, i) => (
-                <span key={i} className="text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">{f}</span>
+                <span key={i} className={`text-xs px-2 py-0.5 rounded-full ${f.status === "high" ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-800"}`}>
+                  {f.param} {f.value}{f.unit} {f.status === "high" ? "↑ HIGH" : "↓ LOW"}
+                </span>
+              ))}
+            </div>
+          )}
+          {scanResult.warnings?.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {scanResult.warnings.map((w, i) => (
+                <span key={i} className="text-xs text-amber-700">⚠ {w}</span>
               ))}
             </div>
           )}
