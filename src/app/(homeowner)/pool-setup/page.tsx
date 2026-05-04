@@ -78,7 +78,7 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: 
   );
 }
 
-export default function OnboardingPage() {
+export default function PoolSetupPage() {
   const router = useRouter();
   const [step, setStep]       = useState(1);
   const [p, setP]             = useState<Profile>(INITIAL);

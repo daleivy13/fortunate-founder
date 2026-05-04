@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { Shield, CheckCircle2, Calendar, DollarSign, Loader2, AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -22,7 +22,7 @@ const TIER_LABEL: Record<string, string> = {
   commercial:"Commercial",
 };
 
-export default function InsuranceDashboardPage() {
+function InsuranceDashboardContent() {
   const searchParams = useSearchParams();
   const [policy,   setPolicy]   = useState<Policy | null>(null);
   const [loading,  setLoading]  = useState(true);
@@ -133,5 +133,13 @@ export default function InsuranceDashboardPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function InsuranceDashboardPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-50 flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-[#1756a9]" /></div>}>
+      <InsuranceDashboardContent />
+    </Suspense>
   );
 }

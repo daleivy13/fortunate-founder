@@ -1,21 +1,20 @@
-// Upstash Redis cache — install: npm install @upstash/redis
-// Get free Redis at: https://console.upstash.com
+// Upstash Redis cache — get free Redis at: https://console.upstash.com
+import { Redis } from "@upstash/redis";
 
-let redis: any = null;
+let redis: Redis | null = null;
 
-async function getRedis() {
+function getRedis(): Redis | null {
   if (redis) return redis;
   const url   = process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.UPSTASH_REDIS_REST_TOKEN;
   if (!url || !token) return null; // graceful degradation — no cache
-  const { Redis } = await import("@upstash/redis");
   redis = new Redis({ url, token });
   return redis;
 }
 
 export async function cacheGet<T>(key: string): Promise<T | null> {
   try {
-    const r = await getRedis();
+    const r = getRedis();
     if (!r) return null;
     return await r.get(key) as T | null;
   } catch {
@@ -25,7 +24,7 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
 
 export async function cacheSet(key: string, value: unknown, ttlSeconds = 300): Promise<void> {
   try {
-    const r = await getRedis();
+    const r = getRedis();
     if (!r) return;
     await r.set(key, value, { ex: ttlSeconds });
   } catch {}
@@ -33,7 +32,7 @@ export async function cacheSet(key: string, value: unknown, ttlSeconds = 300): P
 
 export async function cacheDel(...keys: string[]): Promise<void> {
   try {
-    const r = await getRedis();
+    const r = getRedis();
     if (!r) return;
     await r.del(...keys);
   } catch {}
