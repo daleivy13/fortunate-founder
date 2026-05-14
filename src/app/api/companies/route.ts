@@ -10,19 +10,20 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { companyName, phone, address, ownerId, email, plan } = body;
+    const { companyName, phone, address, ownerId, email, plan, accountType } = body;
 
     // Create company
     const [company] = await db
       .insert(companies)
       .values({
-        name: companyName,
+        name:               companyName,
         ownerId,
-        phone: phone || null,
-        address: address || null,
-        plan: plan ?? "starter",
+        phone:              phone || null,
+        address:            address || null,
+        plan:               plan ?? "starter",
+        accountType:        accountType ?? "employer",
         subscriptionStatus: "trialing",
-        trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+        trialEndsAt:        new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
       })
       .returning();
 

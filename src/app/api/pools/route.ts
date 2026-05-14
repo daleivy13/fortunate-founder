@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/backend/db";
-import { pools, chemistryReadings } from "@/backend/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { pools, chemistryReadings, companies } from "@/backend/db/schema";
+import { eq, desc, count } from "drizzle-orm";
 import { requireAuth } from "@/lib/auth";
 import { validateBody, CreatePoolSchema } from "@/lib/validation";
 import { cacheGetOrSet, cacheDel, CacheKeys } from "@/lib/cache";
@@ -40,6 +40,20 @@ export async function POST(req: NextRequest) {
   if (valErr) return valErr;
 
   try {
+    // Homeowner accounts are capped at 1 pool
+    const [company] = await db.select({ accountType: companies.accountType })
+      .from(companies).where(eq(companies.id, data.companyId));
+    if (company?.accountType === "homeowner") {
+      const [{ value: existingCount }] = await db
+        .select({ value: count() }).from(pools).where(eq(pools.companyId, data.companyId));
+      if (existingCount >= 1) {
+        return NextResponse.json(
+          { error: "Homeowner accounts are limited to 1 pool. Upgrade to add more pools." },
+          { status: 403 }
+        );
+      }
+    }
+
     const [inserted] = await db.insert(pools).values({ ...data, clientName: data.clientName || "", isActive: true }).returning();
     await cacheDel(CacheKeys.pools(data.companyId));
     return NextResponse.json({ pool: inserted }, { status: 201 });

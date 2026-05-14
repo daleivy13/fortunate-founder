@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { db } from "@/backend/db";
-import { companies, invoices } from "@/backend/db/schema";
-import { eq } from "drizzle-orm";
+import { companies, invoices, serviceLeads, leadPurchases } from "@/backend/db/schema";
+import { eq, and } from "drizzle-orm";
 
 export async function POST(req: NextRequest) {
   if (!process.env.STRIPE_SECRET_KEY || !process.env.STRIPE_WEBHOOK_SECRET) {
@@ -41,6 +41,37 @@ export async function POST(req: NextRequest) {
         if (invoiceId) {
           await db.update(invoices).set({ status: "paid", paidAt: new Date() })
             .where(eq(invoices.id, parseInt(invoiceId)));
+        }
+
+        // Lead unlock payment confirmed
+        if (session.metadata?.type === "lead_unlock") {
+          const leadId    = parseInt(session.metadata.leadId);
+          const companyId = parseInt(session.metadata.companyId);
+          if (!isNaN(leadId) && !isNaN(companyId)) {
+            const existing = await db.select().from(leadPurchases)
+              .where(and(eq(leadPurchases.leadId, leadId), eq(leadPurchases.proCompanyId, companyId)));
+            if (existing.length === 0) {
+              await db.insert(leadPurchases).values({
+                leadId,
+                proCompanyId:    companyId,
+                stripePaymentId: session.payment_intent as string,
+                unlockFeeCents:  1000,
+                isRecurring:     false,
+                monthsActive:    0,
+                monthlyFeeCents: 0,
+              });
+            }
+          }
+        }
+      }
+
+      // Lead recurring subscription confirmed
+      if (session.mode === "subscription" && session.metadata?.type === "lead_recurring") {
+        const purchaseId = parseInt(session.metadata.purchaseId ?? "");
+        if (!isNaN(purchaseId)) {
+          await db.update(leadPurchases)
+            .set({ stripeSubId: session.subscription as string })
+            .where(eq(leadPurchases.id, purchaseId));
         }
       }
       break;

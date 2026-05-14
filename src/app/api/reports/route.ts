@@ -15,27 +15,35 @@ export async function GET(req: NextRequest) {
   const poolId    = parseInt(searchParams.get("poolId")    ?? "");
 
   try {
-    let rows;
+    let flatRows: any[];
     if (!isNaN(poolId) && poolId) {
-      rows = await db
+      const rows = await db
         .select()
         .from(serviceReports)
         .where(eq(serviceReports.poolId, poolId))
         .orderBy(desc(serviceReports.servicedAt))
         .limit(50);
+      flatRows = rows;
     } else if (!isNaN(companyId) && companyId) {
-      rows = await db
+      const rows = await db
         .select({ report: serviceReports, pool: pools })
         .from(serviceReports)
         .innerJoin(pools, eq(serviceReports.poolId, pools.id))
         .where(eq(pools.companyId, companyId))
         .orderBy(desc(serviceReports.servicedAt))
         .limit(50);
+      // Flatten so mobile clients get flat report objects with poolId/poolName/clientName
+      flatRows = rows.map((r: any) => ({
+        ...(r.report ?? r),
+        poolId:     r.pool?.id      ?? r.report?.poolId,
+        poolName:   r.pool?.name    ?? null,
+        clientName: r.pool?.clientName ?? null,
+      }));
     } else {
       return NextResponse.json({ error: "companyId or poolId required" }, { status: 400 });
     }
 
-    return NextResponse.json({ reports: rows });
+    return NextResponse.json({ reports: flatRows });
   } catch (err: any) {
     console.error("[api/reports GET]", err);
     return NextResponse.json({ error: err.message }, { status: 500 });

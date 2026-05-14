@@ -2,12 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 
 // Paths that never require Firebase auth
 const PUBLIC_PREFIXES = [
+  "/api",
   "/auth",
-  "/api/stripe/webhook",
-  "/api/homeowner",
-  "/api/weather",
-  "/api/chemistry/analyze",
-  "/api/portal",
   "/homeowner",
   "/customers/portal",
   "/pool-service-software",

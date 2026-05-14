@@ -192,24 +192,51 @@ function analyzeForPool(
   };
 }
 
+// ── Geocode address → lat/lng via Nominatim (free, no key needed) ─────────────
+async function geocodeAddress(address: string): Promise<{ lat: number; lng: number; shortName: string } | null> {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1`,
+      { headers: { "User-Agent": "PoolPalApp/1.0" } }
+    );
+    const data: any[] = await res.json();
+    if (!data[0]?.lat) return null;
+    const parts = (data[0].display_name as string).split(",").map((s: string) => s.trim());
+    return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), shortName: parts.slice(0, 2).join(", ") };
+  } catch {
+    return null;
+  }
+}
+
 // ── API Route ──────────────────────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const lat  = parseFloat(searchParams.get("lat")  ?? "0");
-    const lng  = parseFloat(searchParams.get("lng")  ?? "0");
-    const vol  = parseFloat(searchParams.get("vol")  ?? "15000");
-    const lastCl  = parseFloat(searchParams.get("cl")  ?? "2");
-    const lastCya = parseFloat(searchParams.get("cya") ?? "40");
+    const vol     = parseFloat(searchParams.get("vol")  ?? "15000");
+    const lastCl  = parseFloat(searchParams.get("cl")   ?? "2");
+    const lastCya = parseFloat(searchParams.get("cya")  ?? "40");
+
+    let lat = parseFloat(searchParams.get("lat") ?? "0");
+    let lng = parseFloat(searchParams.get("lng") ?? "0");
+    let locationName = "";
+
+    // Accept address string and geocode if no lat/lng provided
+    const address = searchParams.get("address");
+    if (address && (!lat || !lng)) {
+      const geo = await geocodeAddress(address);
+      if (!geo) return NextResponse.json({ error: "Location not found" }, { status: 404 });
+      lat = geo.lat;
+      lng = geo.lng;
+      locationName = geo.shortName;
+    }
 
     if (!lat || !lng) {
-      return NextResponse.json({ error: "lat and lng required" }, { status: 400 });
+      return NextResponse.json({ error: "Provide lat/lng or address" }, { status: 400 });
     }
 
     const weather = await fetchWeather(lat, lng);
 
     if (!weather) {
-      // Return a fallback if no API key or request fails
       return NextResponse.json({
         weather: null,
         intelligence: null,
@@ -219,7 +246,7 @@ export async function GET(req: NextRequest) {
 
     const intelligence = analyzeForPool(weather, { volumeGallons: vol, lastCl, lastCya });
 
-    return NextResponse.json({ weather, intelligence });
+    return NextResponse.json({ weather, intelligence, locationName });
   } catch (err: any) {
     console.error("[api/weather]", err);
     return NextResponse.json({ error: err.message }, { status: 500 });

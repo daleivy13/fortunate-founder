@@ -5,9 +5,13 @@ import { z } from "zod";
 import { validateBody } from "@/lib/validation";
 
 const Schema = z.object({
-  imageUrl: z.string().url(),
-  poolId:   z.number().int().positive().optional(),
-  reportId: z.number().int().positive().optional(),
+  imageUrl:    z.string().url().optional(),
+  imageBase64: z.string().optional(),
+  poolId:      z.number().int().positive().optional(),
+  reportId:    z.number().int().positive().optional(),
+  companyId:   z.number().int().positive().optional(),
+}).refine((d) => d.imageUrl || d.imageBase64, {
+  message: "Either imageUrl or imageBase64 is required",
 });
 
 export async function POST(req: NextRequest) {
@@ -17,19 +21,23 @@ export async function POST(req: NextRequest) {
   const { data, error: ve } = await validateBody(Schema, await req.json());
   if (ve) return ve;
 
-  // Download the image and convert to base64
   let imageBase64: string;
   let mediaType: "image/jpeg" | "image/png" | "image/webp" | "image/gif" = "image/jpeg";
-  try {
-    const imgRes = await fetch(data.imageUrl);
-    if (!imgRes.ok) throw new Error("Failed to download image");
-    const contentType = imgRes.headers.get("content-type") ?? "image/jpeg";
-    if (contentType.includes("png"))  mediaType = "image/png";
-    if (contentType.includes("webp")) mediaType = "image/webp";
-    const buf = await imgRes.arrayBuffer();
-    imageBase64 = Buffer.from(buf).toString("base64");
-  } catch {
-    return NextResponse.json({ error: "Could not load image for analysis" }, { status: 400 });
+
+  if (data.imageBase64) {
+    imageBase64 = data.imageBase64;
+  } else {
+    try {
+      const imgRes = await fetch(data.imageUrl!);
+      if (!imgRes.ok) throw new Error("Failed to download image");
+      const contentType = imgRes.headers.get("content-type") ?? "image/jpeg";
+      if (contentType.includes("png"))  mediaType = "image/png";
+      if (contentType.includes("webp")) mediaType = "image/webp";
+      const buf = await imgRes.arrayBuffer();
+      imageBase64 = Buffer.from(buf).toString("base64");
+    } catch {
+      return NextResponse.json({ error: "Could not load image for analysis" }, { status: 400 });
+    }
   }
 
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -80,5 +88,25 @@ Respond ONLY with a valid JSON object (no markdown, no extra text):
     return NextResponse.json({ error: "AI analysis could not be parsed", raw }, { status: 500 });
   }
 
-  return NextResponse.json({ analysis, poolId: data.poolId, reportId: data.reportId });
+  // Map to the shape PhotoDamageDetector component expects
+  const conditionToSeverity: Record<string, string> = {
+    good: "minor",
+    fair: "moderate",
+    poor: "severe",
+  };
+  const severity  = conditionToSeverity[analysis.overall_condition] ?? "none";
+  const hasIssues = Array.isArray(analysis.issues) && analysis.issues.length > 0;
+  const findings  = hasIssues
+    ? analysis.issues.map((i: any) => `${i.type}: ${i.description} — ${i.recommendation}`).join("\n\n")
+    : "No significant issues detected.";
+  const claimable = analysis.upsell_opportunity ?? false;
+
+  return NextResponse.json({
+    analysis,
+    findings,
+    severity: hasIssues ? severity : "none",
+    claimable,
+    poolId:   data.poolId,
+    reportId: data.reportId,
+  });
 }

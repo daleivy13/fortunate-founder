@@ -40,6 +40,7 @@ export const companies = pgTable("companies", {
   qbRefreshToken:       text("qb_refresh_token"),
   qbRealmId:            text("qb_realm_id"),
   qbTokenExpiresAt:     timestamp("qb_token_expires_at"),
+  accountType:          text("account_type").default("employer"),
   createdAt:            timestamp("created_at").defaultNow(),
 });
 
@@ -307,6 +308,41 @@ export const homeownerUsage = pgTable("homeowner_usage", {
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (t) => ({ unq: unique().on(t.userId, t.week) }));
+
+// ── Service Leads (homeowner → pro marketplace) ───────────────────────────────
+export const serviceLeads = pgTable("service_leads", {
+  id:           serial("id").primaryKey(),
+  homeownerId:  text("homeowner_id").references(() => users.id).notNull(),
+  poolId:       integer("pool_id").references(() => pools.id),
+  zipCode:      text("zip_code").notNull(),
+  city:         text("city"),
+  state:        text("state"),
+  serviceNeeds: text("service_needs").notNull(), // JSON array: ["weekly_cleaning","algae","chemicals"]
+  poolVolume:   integer("pool_volume"),
+  poolType:     text("pool_type").default("residential"),
+  notes:        text("notes"),
+  status:       text("status").default("open"),  // open | matched | closed
+  budget:       text("budget"),                  // under_100 | 100_200 | 200_plus / month
+  contactName:  text("contact_name").notNull(),
+  contactEmail: text("contact_email"),
+  contactPhone: text("contact_phone"),
+  createdAt:    timestamp("created_at").defaultNow(),
+});
+
+export const leadPurchases = pgTable("lead_purchases", {
+  id:               serial("id").primaryKey(),
+  leadId:           integer("lead_id").references(() => serviceLeads.id).notNull(),
+  proCompanyId:     integer("pro_company_id").references(() => companies.id).notNull(),
+  stripePaymentId:  text("stripe_payment_id"),
+  stripeSubId:      text("stripe_sub_id"),
+  unlockFeeCents:   integer("unlock_fee_cents").default(1000),
+  isRecurring:      boolean("is_recurring").default(false),
+  monthsActive:     integer("months_active").default(0),
+  monthlyFeeCents:  integer("monthly_fee_cents").default(0),
+  nextBillingAt:    timestamp("next_billing_at"),
+  unlockedAt:       timestamp("unlocked_at").defaultNow(),
+  createdAt:        timestamp("created_at").defaultNow(),
+});
 
 // ── Relations ─────────────────────────────────────────────────────────────────
 export const companiesRelations = relations(companies, ({ many }) => ({
